@@ -21,7 +21,8 @@ namespace RDKit {
 
 namespace Canon {
   const int MAX_NATOMS=5000; //!< used in the canonical traversal code
-  const int MAX_CYCLES=99;   //!< used in the canonical traversal code
+  const int MAX_CYCLES=1000;   //!< used in the canonical traversal code
+  const int MAX_BONDTYPE=32; //!< used in the canonical traversal code
 
   //! used in traversals of the molecule
   typedef enum {
@@ -93,8 +94,6 @@ namespace Canon {
 
   //! used to represent possible branches from an atom
   typedef boost::tuple<int,int,RDKit::Bond *> PossibleType;
-  //! compare two PossibleTypes
-  int _possibleComp(const PossibleType &arg1,const PossibleType &arg2);
 
   //! constructs the canonical traversal order for a molecular fragment
   /*!

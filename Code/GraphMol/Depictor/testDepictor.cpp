@@ -112,7 +112,7 @@ void testCollisions() {
                            Cc1ccc(C(c2ccc(C)o2)c2ccccc2[N+](=O)[O-])o1 \
     CN2C3CC(OC(=O)C(CO)c1ccccc1)CC2CC3";
   // this used to be a test, but it's currently failing catastrophically:
-  //      CC(C)(C)O[Si](OCC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)F)(OCC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)F)OC(C)(C)C \
+  //      CC(C)(C)O[Si](OCC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)F)(OCC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)F)OC(C)(C)C
 
   
   std::string rdbase = getenv("RDBASE");
@@ -149,10 +149,9 @@ void testAddHs() {
   // test for issue 193
   std::string smi = "F[C@H](Cl)Br";
   RWMol *m = SmilesToMol(smi, 0, 1);
-  ROMol *m2 = MolOps::addHs(*m);
-  RDDepict::compute2DCoords(*m2);
+  MolOps::addHs(*m);
+  RDDepict::compute2DCoords(*m);
   delete m;
-  delete m2;
 }
 
 void testIssue198() {
@@ -677,6 +676,7 @@ void testGitHubIssue8() {
     TEST_ASSERT(m2);
     TEST_ASSERT(m2->getNumAtoms()==m1->getNumAtoms()-1);
     unsigned int cid1 = RDDepict::compute2DCoords(*m2);
+    TEST_ASSERT(cid1==0);
     delete m1;
     delete m2;
     delete p;

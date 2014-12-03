@@ -11,10 +11,10 @@
 #define __RD_TORSIONANGLE_H__
 
 #include <ForceField/Contrib.h>
+#include <Geometry/point.h>
 
 // we need this so that we get the hybridizations:
 #include <GraphMol/Atom.h>
-//#include <Geometry/point.h>
 
 namespace RDGeom {
   class Point3D;
@@ -94,6 +94,11 @@ namespace ForceFields {
       //! calculates and returns the cosine of a torsion angle
       double calculateCosTorsion(const RDGeom::Point3D &p1,const RDGeom::Point3D &p2,
 				 const RDGeom::Point3D &p3,const RDGeom::Point3D &p4);
+      void calcTorsionGrad(RDGeom::Point3D *r, RDGeom::Point3D *t,
+        double *d, double **g, double &sinTerm, double &cosPhi);
+      double equation17(double bondOrder23, const AtomicParams *at2Params,
+        const AtomicParams *at3Params);
+      bool isInGroup6(int num);
     }
   }
 }

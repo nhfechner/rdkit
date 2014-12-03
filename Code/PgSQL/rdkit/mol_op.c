@@ -135,14 +135,14 @@ mol_rsubstruct(PG_FUNCTION_ARGS) {
                                             fcinfo->flinfo->fn_extra,
                                             fcinfo->flinfo->fn_mcxt,
                                             PG_GETARG_DATUM(0), 
-                                            NULL, &a, NULL);
+                                            NULL, &i, NULL);
   fcinfo->flinfo->fn_extra = SearchMolCache(
                                             fcinfo->flinfo->fn_extra,
                                             fcinfo->flinfo->fn_mcxt,
                                             PG_GETARG_DATUM(1), 
-                                            NULL, &i, NULL);
+                                            NULL, &a, NULL);
 
-  PG_RETURN_BOOL(MolSubstruct(i, a));             
+  PG_RETURN_BOOL(MolSubstruct(a, i));
 }
 
 PG_FUNCTION_INFO_V1(mol_substruct_count);
@@ -201,6 +201,7 @@ MOLDESCR(numsaturatedheterocycles,MolNumSaturatedHeterocycles,INT32)
 MOLDESCR(numaromaticcarbocycles,MolNumAromaticCarbocycles,INT32)
 MOLDESCR(numaliphaticcarbocycles,MolNumAliphaticCarbocycles,INT32)
 MOLDESCR(numsaturatedcarbocycles,MolNumSaturatedCarbocycles,INT32)
+MOLDESCR(numheterocycles,MolNumHeterocycles,INT32)
 
 MOLDESCR(fractioncsp3,MolFractionCSP3,FLOAT4)
 MOLDESCR(chi0n,MolChi0n,FLOAT4)
@@ -216,6 +217,28 @@ MOLDESCR(chi4v,MolChi4v,FLOAT4)
 MOLDESCR(kappa1,MolKappa1,FLOAT4)
 MOLDESCR(kappa2,MolKappa2,FLOAT4)
 MOLDESCR(kappa3,MolKappa3,FLOAT4)
+
+PG_FUNCTION_INFO_V1(mol_formula);
+Datum           mol_formula(PG_FUNCTION_ARGS);
+Datum
+mol_formula(PG_FUNCTION_ARGS) {
+  CROMol  mol;
+  char    *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchMolCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &mol, NULL);
+
+  bool separateIsotopes    = PG_GETARG_BOOL(1);
+  bool abbreviateHIsotopes = PG_GETARG_BOOL(2);
+
+  str = makeMolFormulaText(mol, &len, separateIsotopes, abbreviateHIsotopes);
+
+  PG_RETURN_CSTRING( pnstrdup(str, len) );
+}
 
 PG_FUNCTION_INFO_V1(mol_inchi);
 Datum           mol_inchi(PG_FUNCTION_ARGS);

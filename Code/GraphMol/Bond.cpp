@@ -47,7 +47,7 @@ Bond::Bond(const Bond &other){
 
 Bond::~Bond()
 {
-  if(dp_props) delete dp_props;
+  delete dp_props;
 }
 
 Bond &Bond::operator=(const Bond &other){
@@ -154,6 +154,7 @@ double Bond::getBondTypeAsDouble() const {
   case AROMATIC: return 1.5; break;
   case DATIVEONE: return 1.0; break; // FIX: this should probably be different
   case DATIVE: return 1.0; break; //FIX: again probably wrong
+  case ZERO: return 0; break; 
   default:
     UNDER_CONSTRUCTION("Bad bond type");
   }
@@ -187,6 +188,7 @@ double Bond::getValenceContrib(const Atom *atom) const {
     if(atom->getIdx()==getEndAtomIdx())return 1.0;
     else return 0.0;
     break;
+  case ZERO: return 0; break; 
   default:
     UNDER_CONSTRUCTION("Bad bond type");
 

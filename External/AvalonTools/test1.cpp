@@ -11,9 +11,11 @@
 #include <RDGeneral/RDLog.h>
 #include <GraphMol/RDKitBase.h> 
 #include <GraphMol/SmilesParse/SmilesParse.h>
+#include <GraphMol/FileParsers/FileParsers.h>
 #include <RDGeneral/Invariant.h> 
 #include <DataStructs/ExplicitBitVect.h>
-
+#include <iostream>
+#include <fstream>
 #include "AvalonTools.h"
 
 #include <string>
@@ -58,11 +60,10 @@ void test1(){
 void test2(){
   BOOST_LOG(rdInfoLog) << "testing coordinate generation" << std::endl;
 
-#if 0
+#if 1
   {
     RWMol *m = SmilesToMol("c1cccnc1");
     TEST_ASSERT(m);
-
     unsigned int confId=AvalonTools::set2DCoords(*m);
     TEST_ASSERT(m->getNumConformers()==1);
     TEST_ASSERT(confId==0);
@@ -142,13 +143,13 @@ void test3(){
     ExplicitBitVect bv(2048);
     AvalonTools::getAvalonFP("c1cocc1",true,bv,2048,false,true,0x006FFF);
     BOOST_LOG(rdInfoLog) << "c1cocc1 " << bv.getNumOnBits() << std::endl;
-    TEST_ASSERT(bv.getNumOnBits()==48);
+    TEST_ASSERT(bv.getNumOnBits()==53);
   }
   {
     ExplicitBitVect bv(2048);
     AvalonTools::getAvalonFP("C1=COC=C1",true,bv,2048,false,true,0x006FFF);
     BOOST_LOG(rdInfoLog) << "C1=COC=C1 " << bv.getNumOnBits() << std::endl;
-    TEST_ASSERT(bv.getNumOnBits()==48);
+    TEST_ASSERT(bv.getNumOnBits()==53);
   }
 
   BOOST_LOG(rdInfoLog) << "done" << std::endl;
@@ -248,11 +249,97 @@ void testBadMolfile() {
     CHECK_INVARIANT(oMolb=="",oMolb);
     
   }
+}
+
+void testSmilesSegFault() {
+  BOOST_LOG(rdInfoLog) << "testing a canonical smiles case that led to seg faults " << std::endl;
+  // some tests around dealing with bad mol blocks
+  {
+    std::string inSmi(1024,'C');
+    std::string smi=AvalonTools::getCanonSmiles(inSmi,true);
+    TEST_ASSERT(smi==inSmi);
+  }
+  {
+    std::string inSmi(1534,'C');
+    std::string smi=AvalonTools::getCanonSmiles(inSmi,true);
+    TEST_ASSERT(smi==inSmi);
+  }
+  BOOST_LOG(rdInfoLog) << "done" << std::endl;
+}
+
+void testGithub336() {
+  BOOST_LOG(rdInfoLog) << "testing github issue 336: bad canonical smiles for conjugated double bonds" << std::endl;
+  // some tests around dealing with bad mol blocks
+  {
+    std::string pathName=getenv("RDBASE");
+    pathName += "/External/AvalonTools/test_data/";
+    std::ifstream ins((pathName+"EZ_test.2.sdf").c_str());
+    std::string mb((std::istreambuf_iterator<char>(ins)), 
+                   std::istreambuf_iterator<char>());
+    ROMol *m = MolBlockToMol(mb);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getNumAtoms()==17);
+
+    std::string smi1=AvalonTools::getCanonSmiles(mb,false);
+    std::string smi2=AvalonTools::getCanonSmiles(*m);
+    std::cerr<<"smi1: "<<smi1<<std::endl;
+    std::cerr<<"smi2: "<<smi2<<std::endl;
+    TEST_ASSERT(smi1==smi2);
+    delete m;
+  }  
+
+
+  {
+    std::string pathName=getenv("RDBASE");
+    pathName += "/External/AvalonTools/test_data/";
+    std::ifstream ins((pathName+"heterocycle.mol").c_str());
+    std::string mb((std::istreambuf_iterator<char>(ins)), 
+                   std::istreambuf_iterator<char>());
+    RWMol *m = MolBlockToMol(mb,false);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getNumAtoms()==6);
+    m->updatePropertyCache();
+    MolOps::cleanUp(*m);
+    MolOps::setAromaticity(*m);
+
+    std::string smi1=AvalonTools::getCanonSmiles(mb,false);
+    std::string smi2=AvalonTools::getCanonSmiles(*m);
+    std::cerr<<"smi1: "<<smi1<<std::endl;
+    std::cerr<<"smi2: "<<smi2<<std::endl;
+    TEST_ASSERT(smi1==smi2);
+    TEST_ASSERT(smi1=="CC1C=NNC=1");
+    delete m;
+  }  
+
+  {
+    std::string pathName=getenv("RDBASE");
+    pathName += "/External/AvalonTools/test_data/";
+    std::ifstream ins((pathName+"heterocycle2.mol").c_str());
+    std::string mb((std::istreambuf_iterator<char>(ins)), 
+                   std::istreambuf_iterator<char>());
+    RWMol *m = MolBlockToMol(mb,false);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getNumAtoms()==11);
+    m->updatePropertyCache();
+    MolOps::cleanUp(*m);
+    MolOps::setAromaticity(*m);
+
+    std::string smi1=AvalonTools::getCanonSmiles(mb,false);
+    std::string smi2=AvalonTools::getCanonSmiles(*m);
+    std::cerr<<"smi1: "<<smi1<<std::endl;
+    std::cerr<<"smi2: "<<smi2<<std::endl;
+    TEST_ASSERT(smi1==smi2);
+    TEST_ASSERT(smi1=="CN2C=CC1=CC(=O)NC=C12");
+    delete m;
+  }  
+
+
   BOOST_LOG(rdInfoLog) << "done" << std::endl;
 }
 
 int main(int argc,char *argv[]){
   RDLog::InitLogs();
+#if 1
   test1();
   test2();
   test3();
@@ -261,6 +348,9 @@ int main(int argc,char *argv[]){
   testSubstructFps();
   testStruChk();
   testBadMolfile();
+#endif  
+  testSmilesSegFault();
+  testGithub336();
 
   return 0;
 }

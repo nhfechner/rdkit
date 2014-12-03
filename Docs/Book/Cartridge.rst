@@ -286,13 +286,13 @@ Usually we'd like to find a sorted listed of neighbors along with the accompanyi
 This SQL function makes that pattern easy::
 
   chembl_14=# create or replace function get_mfp2_neighbors(smiles text)
-        returns table(molregno numeric, m mol, similarity double precision) as
-      $$
-      select molregno,m,tanimoto_sml(morganbv_fp($1::mol),mfp2) as similarity
-      from rdk.fps join rdk.mols using (molregno) 
-      where morganbv_fp($1::mol)%mfp2 
-      order by morganbv_fp($1::mol)<%>mfp2;
-      $$ language sql stable ;
+      returns table(molregno integer, m mol, similarity double precision) as
+    $$
+    select molregno,m,tanimoto_sml(morganbv_fp(mol_from_smiles($1::cstring)),mfp2) as similarity
+    from rdk.fps join rdk.mols using (molregno)
+    where morganbv_fp(mol_from_smiles($1::cstring))%mfp2
+    order by morganbv_fp(mol_from_smiles($1::cstring))<%>mfp2;
+    $$ language sql stable ;
   CREATE FUNCTION
   Time: 0.856 ms
   chembl_14=# 
@@ -485,12 +485,13 @@ Molecule I/O and Validation
 
 * `mol_from_smiles(smiles)` : returns a molecule for a SMILES string, NULL if the molecule construction fails.
 * `mol_from_smarts(smarts)` : returns a molecule for a SMARTS string, NULL if the molecule construction fails.
-* `mol_from_ctab(ctab)` : returns a molecule for a CTAB (mol block) string, NULL if the molecule construction fails.
+* `mol_from_ctab(ctab, bool default false)` : returns a molecule for a CTAB (mol block) string, NULL if the molecule construction fails. The optional second argument controls whether or not the molecule's coordinates are saved.
 * `mol_from_pkl(bytea)` : returns a molecule for a binary string (bytea), NULL if the molecule construction fails. (*available from Q3 2012 (2012_09) release*)
 
 * `mol_to_smiles(mol)` : returns the canonical SMILES for a molecule.
 * `mol_to_smarts(mol)` : returns SMARTS string for a molecule.
 * `mol_to_pkl(mol)` : returns binary string (bytea) for a molecule. (*available from Q3 2012 (2012_09) release*)
+* `mol_to_ctab(mol,bool default true)` : returns a CTAB (mol block) string for a molecule. The optional second argument controls whether or not 2D coordinates will be generated for molecules that don't have coordinates. (*available from the 2014_03 release*)
 
 
 Substructure operations
@@ -525,6 +526,9 @@ Descriptors
 * `mol_numsaturatedcarbocycles(mol)` : returns the number of saturated carbocycles in a molecule (*available from 2013_03 release*).
 * `mol_inchi(mol)` : returns an InChI for the molecule. (*available from the 2011_06 release, requires that the RDKit be built with InChI support*).
 * `mol_inchikey(mol)` : returns an InChI key for the molecule. (*available from the 2011_06 release, requires that the RDKit be built with InChI support*).
+* `mol_formula(mol,bool default false, bool default true)` : returns a string with the molecular formula. The second argument controls whether isotope information is included in the formula; the third argument controls whether "D" and "T" are used instead of [2H] and [3H].
+(*available from the 2014_03 release*)
+
 
 Connectivity Descriptors
 ::::::::::::::::::::::::
@@ -541,6 +545,41 @@ Other
 * `rdkit_version()` : returns a string with the cartridge version number.
 
 There are additional functions defined in the cartridge, but these are used for internal purposes.
+
+
+Using the Cartridge from Python
++++++++++++++++++++++++++++++++
+
+The recommended adapter for connecting to postgresql is pyscopg2
+(https://pypi.python.org/pypi/psycopg2). 
+
+Here's an example of connecting to our local copy of ChEMBL and doing
+a basic substructure search:: 
+
+  >>> import psycopg2
+  >>> conn = psycopg2.connect(database='chembl_16')
+  >>> curs = conn.cursor()
+  >>> curs.execute('select * from rdk.mols where m@>%s',('c1cccc2c1nncc2',))
+  >>> curs.fetchone()
+  (9830, 'CC(C)Sc1ccc(CC2CCN(C3CCN(C(=O)c4cnnc5ccccc54)CC3)CC2)cc1')
+
+That returns a SMILES for each molecule. If you plan to do more work
+with the molecules after retrieving them, it is much more efficient to
+ask postgresql to give you the molecules in pickled form::
+
+  >>> curs.execute('select molregno,mol_send(m) from rdk.mols where m@>%s',('c1cccc2c1nncc2',))
+  >>> row = curs.fetchone()
+  >>> row
+  (9830, <read-only buffer for 0x...>)
+
+These pickles can then be converted into molecules:: 
+
+  >>> from rdkit import Chem
+  >>> m = Chem.Mol(str(row[1]))
+  >>> Chem.MolToSmiles(m,True)
+  'CC(C)Sc1ccc(CC2CCN(C3CCN(C(=O)c4cnnc5ccccc54)CC3)CC2)cc1'
+
+
 
 License
 +++++++

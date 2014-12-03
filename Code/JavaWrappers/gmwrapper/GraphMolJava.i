@@ -41,6 +41,10 @@
     #include <boost/shared_array.hpp>
 %}
 // The actual definition isn't in the top level hpp file!
+// The next two lines are to work around a problem caused by the fact that older versions of
+// SWIG don't work with newer versions of boost.
+#define BOOST_NOEXCEPT
+#define BOOST_NO_CXX11_RVALUE_REFERENCES
 %include <boost/smart_ptr/shared_array.hpp>
 
 /* Include the base types before anything that will utilize them */
@@ -87,6 +91,7 @@ typedef unsigned long long int	uintmax_t;
 */
 #endif
 
+%shared_ptr(std::exception)
 %shared_ptr(RDKit::ROMol)
 %shared_ptr(RDKit::RWMol)
 %shared_ptr(RDKit::Atom)
@@ -106,6 +111,7 @@ typedef unsigned long long int	uintmax_t;
 %shared_ptr(ForceFields::UFF::DistanceConstraintContrib);
 %shared_ptr(ForceFields::UFF::vdWContrib);
 %shared_ptr(ForceFields::UFF::TorsionAngleContrib);
+%shared_ptr(ForceFields::UFF::InversionContrib);
 
 /* Some utility classes for passing arrays in and out */
 %array_class(double, Double_Array);
@@ -155,6 +161,7 @@ typedef unsigned long long int	uintmax_t;
 %include "../QueryAtom.i"
 %include "../QueryBond.i"
 %include "../QueryOps.i"
+%include "../MonomerInfo.i"
 %include "../PeriodicTable.i"
 %include "../SanitException.i"
 %include "../SmilesParse.i"
@@ -175,6 +182,8 @@ typedef unsigned long long int	uintmax_t;
 %include "../ForceField.i"
 %include "../ChemTransforms.i"
 %include "../Subgraphs.i"
+%include "../MolTransforms.i"
+%include "../FMCS.i"
 
 // Create a class to throw various sorts of errors for testing.  Required for unit tests in ErrorHandlingTests.java
 #ifdef INCLUDE_ERROR_GENERATOR

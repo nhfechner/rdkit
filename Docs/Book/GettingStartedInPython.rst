@@ -244,6 +244,33 @@ M  END
 
 The optimization step isn't necessary, but it substantially improves the quality of the conformation.
 
+To get good conformations, it's almost always a good idea to add hydrogens to the molecule first:
+
+>>> m3 = Chem.AddHs(m2)
+>>> AllChem.EmbedMolecule(m3)
+0
+>>> AllChem.UFFOptimizeMolecule(m3)
+0
+
+These can then be removed:
+
+>>> m3 = Chem.RemoveHs(m3)
+>>> print Chem.MolToMolBlock(m3)    # doctest: +NORMALIZE_WHITESPACE
+cyclobutane
+     RDKit          3D
+<BLANKLINE>
+  4  4  0  0  0  0  0  0  0  0999 V2000
+    0.2851    1.0372   -0.0171 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0352   -0.2833    0.0743 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.2851   -1.0372    0.0171 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0352    0.2833   -0.0743 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  2  3  1  0
+  3  4  1  0
+  4  1  1  0
+M  END
+<BLANKLINE>
+
 If you'd like to write the molecules to a file, use Python file objects:
 
 >>> print >>file('data/foo.mol','w+'),Chem.MolToMolBlock(m2)
@@ -521,6 +548,27 @@ MMFF-related methods.
 >>> AllChem.MMFFOptimizeMolecule(m2)
 0
 
+With the RDKit, also multiple conformers can be generated. The option numConfs allows the user to set the number of conformers that should be generated.
+These conformers can be aligned to each other and the RMS values calculated.
+
+>>> m = Chem.MolFromSmiles('C1CCC1OC')
+>>> m2=Chem.AddHs(m)
+>>> cids = AllChem.EmbedMultipleConfs(m2, numConfs=10)
+>>> print len(cids)
+10
+>>> for cid in cids:
+...    _ = AllChem.MMFFOptimizeMolecule(m2, confId=cid)
+>>> rmslist = []
+>>> AllChem.AlignMolConformers(m2, RMSlist=rmslist)
+>>> print len(rmslist)
+9
+
+rmslist contains the RMS values between the first conformer and all others.
+The RMS between two specific conformers (e.g. 1 and 9) can also be calculated. The flag prealigned lets the user specify if the conformers are already aligned (by default, the function aligns them).
+
+>>> rms = AllChem.GetConformerRMS(m2, 1, 9, prealigned=True)
+
+More 3D functionality of the RDKit is described in the Cookbook.
 
 
 *Disclaimer/Warning*: Conformation generation is a difficult and subtle task.
@@ -805,44 +853,62 @@ Maximum Common Substructure
 The FindMCS function find a maximum common substructure (MCS) of two
 or more molecules:
 
->>> from rdkit.Chem import MCS
+>>> from rdkit.Chem import rdFMCS
 >>> mol1 = Chem.MolFromSmiles("O=C(NCc1cc(OC)c(O)cc1)CCCC/C=C/C(C)C")
 >>> mol2 = Chem.MolFromSmiles("CC(C)CCCCCC(=O)NCC1=CC(=C(C=C1)O)OC")
 >>> mol3 = Chem.MolFromSmiles("c1(C=O)cc(OC)c(O)cc1")
 >>> mols = [mol1,mol2,mol3]
->>> MCS.FindMCS(mols)
-MCSResult(numAtoms=10, numBonds=10, smarts='[#6]:1(:[#6]:[#6](:[#6](:[#6]:[#6]:1)-[#8])-[#8]-[#6])-[#6]', completed=1)
+>>> res=rdFMCS.FindMCS(mols)
+>>> res
+<rdkit.Chem.rdFMCS.MCSResult object at 0x...>
+>>> res.numAtoms
+10
+>>> res.numBonds
+10
+>>> res.smartsString
+'[#6]1(-[#6]):[#6]:[#6](-[#8]-[#6]):[#6](:[#6]:[#6]:1)-[#8]'
+>>> res.canceled
+False
 
 It returns an MCSResult instance with information about the number of
 atoms and bonds in the MCS, the SMARTS string which matches the
 identified MCS, and a flag saying if the algorithm timed out. If no
-MCS is found then the number of atoms and bonds is set to -1 and the
-SMARTS to ``None``. This can be because the MCS is smaller than
-``minNumAtoms``. Normally this is two atoms, but you can specify
-a higher value.
+MCS is found then the number of atoms and bonds is set to 0 and the
+SMARTS to ``''``.
 
 By default, two atoms match if they are the same element and two bonds
 match if they have the same bond type. Specify ``atomCompare`` and
 ``bondCompare`` to use different comparison functions, as in:
     
 >>> mols = (Chem.MolFromSmiles('NCC'),Chem.MolFromSmiles('OC=C'))
->>> MCS.FindMCS(mols)
-MCSResult(numAtoms=-1, numBonds=-1, smarts=None, completed=1)
->>> MCS.FindMCS(mols, atomCompare="any")
-MCSResult(numAtoms=2, numBonds=1, smarts='[*]-[*]', completed=1)
->>> MCS.FindMCS(mols, bondCompare="any")
-MCSResult(numAtoms=2, numBonds=1, smarts='[#6]~[#6]', completed=1)
+>>> rdFMCS.FindMCS(mols).smartsString
+''
+>>> rdFMCS.FindMCS(mols, atomCompare=rdFMCS.AtomCompare.CompareAny).smartsString
+'[#7,#8]-[#6]'
+>>> rdFMCS.FindMCS(mols, bondCompare=rdFMCS.BondCompare.CompareAny).smartsString
+'[#6]-,=[#6]'
 
-An atomCompare of "any" says that any atom matches any other atom,
-"elements" compares by element type, and "isotopes" matches based on
-the isotope label. Isotope labels can be used to implement
-user-defined atom types. A bondCompare of "any" says that any bond
-matches any other bond, and "bondtypes" says bonds are equivalent if
-and only if they have the same bond type.
+The options for the atomCompare argument are: CompareAny says that any
+atom matches any other atom, CompareElements compares by element type,
+and CompareIsotopes matches based on the isotope label. Isotope labels
+can be used to implement user-defined atom types. A bondCompare of
+CompareAny says that any bond matches any other bond, CompareOrderExact says
+bonds are equivalent if and only if they have the same bond type, and
+CompareOrder allows single and aromatic bonds to match each other, but
+requires an exact order match otherwise:
 
-A substructure has both atoms and bonds. The default ``maximize``
-setting of "atoms" finds a common substructure with the most number of
-atoms. Use maximize="bonds" to maximize the number of bonds.
+>>> mols = (Chem.MolFromSmiles('c1ccccc1'),Chem.MolFromSmiles('C1CCCC=C1'))
+>>> rdFMCS.FindMCS(mols,bondCompare=rdFMCS.BondCompare.CompareAny).smartsString
+'[#6]1:,-[#6]:,-[#6]:,-[#6]:,-[#6]:,=[#6]:,-1'
+>>> rdFMCS.FindMCS(mols,bondCompare=rdFMCS.BondCompare.CompareOrderExact).smartsString
+''
+>>> rdFMCS.FindMCS(mols,bondCompare=rdFMCS.BondCompare.CompareOrder).smartsString
+'[#6](:,-[#6]:,-[#6]:,-[#6]):,-[#6]:,-[#6]'
+
+
+A substructure has both atoms and bonds. By default, the algorithm
+attempts to maximize the number of bonds found. You can change this by
+setting the ``maximizeBonds`` argument to False.
 Maximizing the number of bonds tends to maximize the number of rings,
 although two small rings may have fewer bonds than one large ring.
 
@@ -852,20 +918,20 @@ information.  When True, the atomCompare setting is modified to also
 require that the two atoms have the same valency.
 
 >>> mols = (Chem.MolFromSmiles('NC1OC1'),Chem.MolFromSmiles('C1OC1[N+](=O)[O-]'))
->>> MCS.FindMCS(mols)
-MCSResult(numAtoms=4, numBonds=4, smarts='[#7]-[#6]-1-[#8]-[#6]-1', completed=1)
->>> MCS.FindMCS(mols, matchValences=True)
-MCSResult(numAtoms=3, numBonds=3, smarts='[#6v4]-1-[#8v2]-[#6v4]-1', completed=1)
+>>> rdFMCS.FindMCS(mols).numAtoms
+4
+>>> rdFMCS.FindMCS(mols, matchValences=True).numBonds
+3
 
 It can be strange to see a linear carbon chain match a carbon ring,
 which is what the ``ringMatchesRingOnly`` default of False does. If
 you set it to True then ring bonds will only match ring bonds.
 
 >>> mols = [Chem.MolFromSmiles("C1CCC1CCC"), Chem.MolFromSmiles("C1CCCCCC1")]
->>> MCS.FindMCS(mols)
-MCSResult(numAtoms=7, numBonds=6, smarts='[#6]-[#6]-[#6]-[#6]-[#6]-[#6]-[#6]', completed=1)
->>> MCS.FindMCS(mols, ringMatchesRingOnly=True)
-MCSResult(numAtoms=4, numBonds=3, smarts='[#6](-@[#6])-@[#6]-@[#6]', completed=1)
+>>> rdFMCS.FindMCS(mols).smartsString
+'[#6](-[#6]-[#6])-[#6]-[#6]-[#6]-[#6]'
+>>> rdFMCS.FindMCS(mols, ringMatchesRingOnly=True).smartsString
+'[#6](-[#6]-[#6])-[#6]'
 
 You can further restrict things and require that partial rings (as in
 this case) are not allowed. That is, if an atom is part of the MCS and
@@ -874,23 +940,23 @@ a ring of the MCS. Set ``completeRingsOnly`` to True to toggle this
 requirement and also sets ringMatchesRingOnly to True.
 
 >>> mols = [Chem.MolFromSmiles("CCC1CC2C1CN2"), Chem.MolFromSmiles("C1CC2C1CC2")]
->>> MCS.FindMCS(mols)
-MCSResult(numAtoms=6, numBonds=6, smarts='[#6]-1-[#6]-[#6](-[#6])-[#6]-1-[#6]', completed=1)
->>> MCS.FindMCS(mols, ringMatchesRingOnly=True)
-MCSResult(numAtoms=5, numBonds=5, smarts='[#6]-@1-@[#6]-@[#6](-@[#6])-@[#6]-@1', completed=1)
->>> MCS.FindMCS(mols, completeRingsOnly=True)
-MCSResult(numAtoms=4, numBonds=4, smarts='[#6]-@1-@[#6]-@[#6]-@[#6]-@1', completed=1)
+>>> rdFMCS.FindMCS(mols).smartsString
+'[#6]1-[#6]-[#6](-[#6]-1-[#6])-[#6]'
+>>> rdFMCS.FindMCS(mols, ringMatchesRingOnly=True).smartsString
+'[#6](-[#6]-[#6]-[#6]-[#6])-[#6]'
+>>> rdFMCS.FindMCS(mols, completeRingsOnly=True).smartsString
+'[#6]1-[#6]-[#6]-[#6]-1'
 
 The MCS algorithm will exhaustively search for a maximum common substructure.
 Typically this takes a fraction of a second, but for some comparisons this
 can take minutes or longer. Use the ``timeout`` parameter to stop the search
 after the given number of seconds (wall-clock seconds, not CPU seconds) and
 return the best match found in that time. If timeout is reached then the
-``completed`` property of the MCSResult will be 0 instead of 1.
+``canceled`` property of the MCSResult will be True instead of False.
 
 >>> mols = [Chem.MolFromSmiles("Nc1ccccc1"*100), Chem.MolFromSmiles("Nc1ccccccccc1"*100)]
->>> MCS.FindMCS(mols, timeout=0.1)
-MCSResult(numAtoms=..., numBonds=..., smarts='[#7]-[#6]...', completed=0)
+>>> rdFMCS.FindMCS(mols, timeout=1).canceled
+True
 
 (The MCS after 50 seconds contained 511 atoms.)
 
@@ -1210,7 +1276,7 @@ get the molecules themselves as follows:
 
 
 Generating Similarity Maps Using Fingerprints
-============================================
+=============================================
 
 Similarity maps are a way to visualize the atomic contributions to
 the similarity between a molecule and a reference molecule. The
@@ -1550,12 +1616,77 @@ The result is a generator object:
 That returns molecules on request:
 
 >>> prods = [ms.next() for x in range(10)]
+>>> prods[0]
+<rdkit.Chem.rdchem.Mol object at 0x...>
+
+The molecules have not been sanitized, so it's a good idea to at least update the valences before continuing:
+
+>>> for prod in prods:
+...     prod.UpdatePropertyCache(strict=False)
+...     
 >>> Chem.MolToSmiles(prods[0],True)
 'O=[N+]([O-])c1ccc(C2CCCO2)cc1'
 >>> Chem.MolToSmiles(prods[1],True)
 'c1ccc(C2CCCO2)cc1'
 >>> Chem.MolToSmiles(prods[2],True)
 'NS(=O)(=O)c1ccc(C2CCCO2)cc1'
+
+Other fragmentation approaches
+==============================
+
+In addition to the methods described above, the RDKit provide a very
+flexible generic function for fragmenting molecules along
+user-specified bonds.
+
+Here's a quick demonstration of using that to break all bonds between
+atoms in rings and atoms not in rings. We start by finding all the
+atom pairs:
+
+>>> m = Chem.MolFromSmiles('CC1CC(O)C1CCC1CC1')
+>>> bis = m.GetSubstructMatches(Chem.MolFromSmarts('[!R][R]'))
+>>> bis
+((0, 1), (4, 3), (6, 5), (7, 8))
+
+then we get the corresponding bond indices:
+
+>>> bs = [m.GetBondBetweenAtoms(x,y).GetIdx() for x,y in bis]
+>>> bs
+[0, 3, 5, 7]
+
+then we use those bond indices as input to the fragmentation function:
+
+>>> nm = Chem.FragmentOnBonds(m,bs)
+
+the output is a molecule that has dummy atoms marking the places where
+bonds were broken:
+
+>>> Chem.MolToSmiles(nm,True)
+'[*]C1CC([4*])C1[6*].[1*]C.[3*]O.[5*]CC[8*].[7*]C1CC1'
+
+By default the attachment points are labelled (using isotopes) with
+the index of the atom that was removed. We can also provide our own set of
+atom labels in the form of pairs of unsigned integers. The first value
+in each pair is used as the label for the dummy that replaces the
+bond's begin atom, the second value in each pair is for the dummy that
+replaces the bond's end atom. Here's an example, repeating the
+analysis above and marking the positions where the non-ring atoms were
+with the label 10 and marking the positions where the ring atoms were
+with label 1:
+
+>>> bis = m.GetSubstructMatches(Chem.MolFromSmarts('[!R][R]'))
+>>> bs = []
+>>> labels=[]
+>>> for bi in bis:
+...    b = m.GetBondBetweenAtoms(bi[0],bi[1])
+...    if b.GetBeginAtomIdx()==bi[0]:
+...        labels.append((10,1))
+...    else:
+...        labels.append((1,10))
+...    bs.append(b.GetIdx())
+>>> nm = Chem.FragmentOnBonds(m,bs,dummyLabels=labels)
+>>> Chem.MolToSmiles(nm,True)
+'[1*]C.[1*]O.[1*]CC[1*].[10*]C1CC1.[10*]C1CC([10*])C1[10*]'
+
 
 
 Chemical Features and Pharmacophores
@@ -1603,7 +1734,7 @@ If the molecule has coordinates, then the features will also have reasonable loc
 >>> feats[0].GetPos()
 <rdkit.Geometry.rdGeometry.Point3D object at 0x...>
 >>> list(feats[0].GetPos())
-[-2.99..., -1.558..., 0.0]
+[2.07..., -2.335..., 0.0]
 
 
 2D Pharmacophore Fingerprints
@@ -2042,69 +2173,126 @@ SSSR count, not the potentially non-unique set of rings.
 List of Available Descriptors
 *****************************
 
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Descriptor/Descriptor Family      | Notes                                                                                                                       |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Gasteiger/Marsili Partial Charges | *Tetrahedron* **36**:3219\-28 (1980)                                                                                        |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| BalabanJ                          | *Chem. Phys. Lett.* **89**:399\-404 (1982)                                                                                  |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| BertzCT                           | *J. Am. Chem. Soc.* **103**:3599\-601 (1981)                                                                                |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Ipc                               | *J. Chem. Phys.* **67**:4517\-33 (1977)                                                                                     |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| HallKierAlpha                     | *Rev. Comput. Chem.* **2**:367\-422 (1991)                                                                                  |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Kappa1 \- Kappa3                  | *Rev. Comput. Chem.* **2**:367\-422 (1991)                                                                                  |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Chi0, Chi1                        | *Rev. Comput. Chem.* **2**:367\-422 (1991)                                                                                  |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Chi0n \- Chi4n                    | *Rev. Comput. Chem.* **2**:367\-422 (1991)                                                                                  |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Chi0v \- Chi4v                    | *Rev. Comput. Chem.* **2**:367\-422 (1991)                                                                                  |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| MolLogP                           | Wildman and Crippen *JCICS* **39**:868\-73 (1999)                                                                           |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| MolMR                             | Wildman and Crippen *JCICS* **39**:868\-73 (1999)                                                                           |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| MolWt                             |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| HeavyAtomCount                    |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| HeavyAtomMolWt                    |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NHOHCount                         |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NOCount                           |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NumHAcceptors                     |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NumHDonors                        |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NumHeteroatoms                    |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NumRotatableBonds                 |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| NumValenceElectrons               |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| RingCount                         |                                                                                                                             |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| TPSA                              | *J. Med. Chem.* **43**:3714\-7, (2000)                                                                                      |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| LabuteASA                         | *J. Mol. Graph. Mod.* **18**:464\-77 (2000)                                                                                 |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| PEOE_VSA1 \- PEOE_VSA14           | MOE\-type descriptors using partial charges and surface area contributionshttp://www.chemcomp.com/journal/vsadesc.htm       |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| SMR_VSA1 \- SMR_VSA10             | MOE\-type descriptors using MR contributions and surface area contributionshttp://www.chemcomp.com/journal/vsadesc.htm      |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| SlogP_VSA1 \- SlogP_VSA12         | MOE\-type descriptors using LogP contributions and surface area contributionshttp://www.chemcomp.com/journal/vsadesc.htm    |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| EState_VSA1 \- EState_VSA11       | MOE\-type descriptors using EState indices and surface area contributions (developed at RD, not described in the CCG paper) |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| VSA_EState1 \- VSA_EState10       | MOE\-type descriptors using EState indices and surface area contributions (developed at RD, not described in the CCG paper) |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Topliss fragments                 | implemented using a set of SMARTS definitions in $(RDBASE)/Data/FragmentDescriptors.csv                                     |
-+-----------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+
++-----------------------------------------------------+-------------------------------------------+
+|Descriptor/Descriptor                                |Notes                                      |
+|Family                                               |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|Gasteiger/Marsili                                    |*Tetrahedron*                              |
+|Partial Charges                                      |**36**:3219\-28                            |
+|                                                     |(1980)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|BalabanJ                                             |*Chem. Phys. Lett.*                        |
+|                                                     |**89**:399\-404                            |
+|                                                     |(1982)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|BertzCT                                              |*J. Am. Chem. Soc.*                        |
+|                                                     |**103**:3599\-601                          |
+|                                                     |(1981)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|Ipc                                                  |*J. Chem. Phys.*                           |
+|                                                     |**67**:4517\-33                            |
+|                                                     |(1977)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|HallKierAlpha                                        |*Rev. Comput. Chem.*                       |
+|                                                     |**2**:367\-422                             |
+|                                                     |(1991)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|Kappa1 \- Kappa3                                     |*Rev. Comput. Chem.*                       |
+|                                                     |**2**:367\-422                             |
+|                                                     |(1991)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|Chi0, Chi1                                           |*Rev. Comput. Chem.*                       |
+|                                                     |**2**:367\-422                             |
+|                                                     |(1991)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|Chi0n \- Chi4n                                       |*Rev. Comput. Chem.*                       |
+|                                                     |**2**:367\-422                             |
+|                                                     |(1991)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|Chi0v \- Chi4v                                       |*Rev. Comput. Chem.*                       |
+|                                                     |**2**:367\-422                             |
+|                                                     |(1991)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|MolLogP                                              |Wildman and Crippen                        |
+|                                                     |*JCICS*                                    |
+|                                                     |**39**:868\-73                             |
+|                                                     |(1999)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|MolMR                                                |Wildman and Crippen                        |
+|                                                     |*JCICS*                                    |
+|                                                     |**39**:868\-73                             |
+|                                                     |(1999)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|MolWt                                                |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|ExactMolWt                                           |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|HeavyAtomCount                                       |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|HeavyAtomMolWt                                       |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NHOHCount                                            |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NOCount                                              |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NumHAcceptors                                        |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NumHDonors                                           |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NumHeteroatoms                                       |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NumRotatableBonds                                    |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NumValenceElectrons                                  |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|NumAmideBonds                                        |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|Num{Aromatic,Saturated,Aliphatic}Rings               |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|Num{Aromatic,Saturated,Aliphatic}{Hetero,Carbo}cycles|                                           |
++-----------------------------------------------------+-------------------------------------------+
+|RingCount                                            |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|FractionCSP3                                         |                                           |
++-----------------------------------------------------+-------------------------------------------+
+|TPSA                                                 |*J. Med. Chem.*                            |
+|                                                     |**43**:3714\-7,                            |
+|                                                     |(2000)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|LabuteASA                                            |*J. Mol. Graph. Mod.*                      |
+|                                                     |**18**:464\-77 (2000)                      |
++-----------------------------------------------------+-------------------------------------------+
+|PEOE_VSA1 \- PEOE_VSA14                              |MOE\-type descriptors using partial charges|
+|                                                     |and surface area contributions             |
+|                                                     |http://www.chemcomp.com/journal/vsadesc.htm|
++-----------------------------------------------------+-------------------------------------------+
+|SMR_VSA1 \- SMR_VSA10                                |MOE\-type descriptors using MR             |
+|                                                     |contributions and surface area             |
+|                                                     |contributions                              |
+|                                                     |http://www.chemcomp.com/journal/vsadesc.htm|
++-----------------------------------------------------+-------------------------------------------+
+|SlogP_VSA1 \- SlogP_VSA12                            |MOE\-type descriptors using LogP           |
+|                                                     |contributions and surface area             |
+|                                                     |contributions                              |
+|                                                     |http://www.chemcomp.com/journal/vsadesc.htm|
++-----------------------------------------------------+-------------------------------------------+
+|EState_VSA1 \- EState_VSA11                          |MOE\-type descriptors using EState indices |
+|                                                     |and surface area contributions (developed  |
+|                                                     |at RD, not described in the CCG paper)     |
++-----------------------------------------------------+-------------------------------------------+
+|VSA_EState1 \- VSA_EState10                          |MOE\-type descriptors using EState indices |
+|                                                     |and surface area contributions (developed  |
+|                                                     |at RD, not described in the CCG paper)     |
++-----------------------------------------------------+-------------------------------------------+
+|MQNs                                                 |Nguyen et al. *ChemMedChem* **4**:1803\-5  |
+|                                                     |(2009)                                     |
++-----------------------------------------------------+-------------------------------------------+
+|Topliss fragments                                    |implemented using a set of SMARTS          |
+|                                                     |definitions in                             |
+|                                                     |$(RDBASE)/Data/FragmentDescriptors.csv     |
++-----------------------------------------------------+-------------------------------------------+
+                                                                                                                                                                                      
 
 
 List of Available Fingerprints

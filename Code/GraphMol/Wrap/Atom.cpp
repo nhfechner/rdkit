@@ -20,6 +20,7 @@
 #include <Geometry/point.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
 #include <GraphMol/SmilesParse/SmartsWrite.h>
+#include <RDBoost/Wrap.h>
 
 #include "seqs.hpp"
 #include <algorithm>
@@ -28,11 +29,11 @@
 namespace python = boost::python;
 namespace RDKit{
   namespace {
-    std::string qhelper(Atom::QUERYATOM_QUERY *q,int depth){
+    std::string qhelper(Atom::QUERYATOM_QUERY *q,unsigned int depth){
       std::string res="";
       if(q){
 	for (unsigned int i=0;i<depth;++i) res+="  ";
-	res += q->getDescription()+"\n";
+	res += q->getFullDescription()+"\n";
 	for(Atom::QUERYATOM_QUERY::CHILD_VECT_CI ci=q->beginChildren();
 	    ci!=q->endChildren();++ci){
 	  res +=  qhelper((*ci).get(),depth+1);
@@ -47,6 +48,14 @@ namespace RDKit{
       res=qhelper(atom->getQuery(),0);
     }
     return res;
+  }
+  void expandQuery(QueryAtom *self,const QueryAtom *other,
+                          Queries::CompositeQueryType how,
+                          bool maintainOrder){
+    if(other->hasQuery()){
+      const QueryAtom::QUERYATOM_QUERY *qry=other->getQuery();
+      self->expandQuery(qry->copy(),how,maintainOrder);
+    }
   }
 
   void AtomSetProp(const Atom *atom, const char *key,std::string val) {
@@ -128,6 +137,19 @@ namespace RDKit{
   void SetAtomMonomerInfo(Atom *atom,const AtomMonomerInfo *info){
     atom->setMonomerInfo(info->copy());
   }
+
+  AtomMonomerInfo *AtomGetMonomerInfo(Atom *atom){
+    return atom->getMonomerInfo();
+  }
+  AtomPDBResidueInfo *AtomGetPDBResidueInfo(Atom *atom){
+    AtomMonomerInfo *res=atom->getMonomerInfo();
+    if(!res) return NULL;
+    if(res->getMonomerType()!=AtomMonomerInfo::PDBRESIDUE){
+      throw_value_error("MonomerInfo is not a PDB Residue");
+    }
+    return (AtomPDBResidueInfo *)res;
+  }
+
 
 
   // FIX: is there any reason at all to not just prevent the construction of Atoms?
@@ -285,8 +307,14 @@ struct atom_wrapper {
            "Returns a list of the properties set on the Atom.\n\n"
            )
 
-      .def("GetMonomerInfo", 
-	   (AtomMonomerInfo *(Atom::*)())&Atom::getMonomerInfo,
+      .def("GetMonomerInfo",
+	   AtomGetMonomerInfo,
+	   python::return_internal_reference<1,
+	   python::with_custodian_and_ward_postcall<0,1> >(),
+	   "Returns the atom's MonomerInfo object, if there is one.\n\n"
+	   )
+      .def("GetPDBResidueInfo",
+	   AtomGetPDBResidueInfo,
 	   python::return_internal_reference<1,
 	   python::with_custodian_and_ward_postcall<0,1> >(),
 	   "Returns the atom's MonomerInfo object, if there is one.\n\n"
@@ -311,6 +339,23 @@ struct atom_wrapper {
       .value("CHI_TETRAHEDRAL_CW",Atom::CHI_TETRAHEDRAL_CW)
       .value("CHI_TETRAHEDRAL_CCW",Atom::CHI_TETRAHEDRAL_CCW)
       .value("CHI_OTHER",Atom::CHI_OTHER)
+      ;
+
+
+    python::enum_<Queries::CompositeQueryType>("CompositeQueryType")
+      .value("COMPOSITE_AND",Queries::COMPOSITE_AND)
+      .value("COMPOSITE_OR",Queries::COMPOSITE_OR)
+      .value("COMPOSITE_XOR",Queries::COMPOSITE_XOR)
+      ;
+      
+
+    atomClassDoc="The class to store QueryAtoms.\n\
+These cannot currently be constructed directly from Python\n";
+    python::class_<QueryAtom,python::bases<Atom> >("QueryAtom",atomClassDoc.c_str(),python::no_init)
+      .def("ExpandQuery",expandQuery,
+           (python::arg("self"),python::arg("other"),python::arg("how")=Queries::COMPOSITE_AND,
+            python::arg("maintainOrder")=true),
+              "combines the query from other with ours")
       ;
 
   };

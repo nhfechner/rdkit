@@ -5,6 +5,7 @@ rdkit_library(GraphMol
               AtomIterators.cpp BondIterators.cpp Aromaticity.cpp Kekulize.cpp 
               MolDiscriminators.cpp ConjugHybrid.cpp AddHs.cpp RankAtoms.cpp 
               Matrices.cpp Chirality.cpp RingInfo.cpp Conformer.cpp
+              Renumber.cpp
               SHARED 
               LINK_LIBRARIES RDGeometryLib RDGeneral 
                  ${RDKit_THREAD_LIBS})
@@ -17,6 +18,7 @@ rdkit_headers(Atom.h
               Canon.h
               Chirality.h
               Conformer.h
+              details.h
               GraphMol.h
               MolOps.h
               MolPickler.h
@@ -60,6 +62,9 @@ add_subdirectory(MolCatalog)
 
 add_subdirectory(MolDrawing)
 
+add_subdirectory(FMCS)
+
+
 
 if(RDK_BUILD_SLN_SUPPORT AND NOT CMAKE_COMPILER_IS_CLANG)
 add_subdirectory(SLNParse)
@@ -71,7 +76,7 @@ rdkit_test(graphmolTest1 test1.cpp LINK_LIBRARIES GraphMol RDGeometryLib RDGener
 
 rdkit_test(graphmolcpTest cptest.cpp LINK_LIBRARIES  SmilesParse GraphMol RDGeometryLib RDGeneral)
 
-rdkit_test(graphmolqueryTest querytest.cpp LINK_LIBRARIES GraphMol RDGeometryLib RDGeneral)
+rdkit_test(graphmolqueryTest querytest.cpp LINK_LIBRARIES SubstructMatch SmilesParse GraphMol RDGeometryLib RDGeneral)
 
 rdkit_test(graphmolMolOpsTest molopstest.cpp 
            LINK_LIBRARIES SubstructMatch FileParsers SmilesParse GraphMol RDGeometryLib RDGeneral)
@@ -86,5 +91,7 @@ rdkit_test(graphmoltestPickler testPickler.cpp
            LINK_LIBRARIES SmilesParse SubstructMatch FileParsers GraphMol RDGeometryLib RDGeneral)
 
 rdkit_test(graphmolIterTest itertest.cpp LINK_LIBRARIES SmilesParse GraphMol RDGeometryLib RDGeneral)
+
+rdkit_test(graphmolMemTest1 memtest1.cpp LINK_LIBRARIES SmilesParse GraphMol RDGeometryLib RDGeneral)
 
 

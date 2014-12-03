@@ -13,6 +13,7 @@
 #include "numpy/arrayobject.h"
 #include <GraphMol/ROMol.h>
 #include <RDBoost/Wrap.h>
+#include <RDBoost/import_array.h>
 #include <GraphMol/Conformer.h>
 #include <GraphMol/MolTransforms/MolTransforms.h>
 #include <Geometry/Transform3D.h>
@@ -58,7 +59,7 @@ BOOST_PYTHON_MODULE(rdMolTransforms) {
   python::scope().attr("__doc__") =
     "Module containing functions to perform 3D operations like rotate and translate conformations";
    
-  import_array();
+  rdkit_import_array();
 
   std::string docString = "Compute the centroid of the conformation - hydrogens are ignored and no attention\n\
                            if paid to the difference in sizes of the heavy atoms\n";
@@ -98,6 +99,43 @@ BOOST_PYTHON_MODULE(rdMolTransforms) {
   python::def("CanonicalizeMol", MolTransforms::canonicalizeMol,
               (python::arg("mol"), python::arg("normalizeCovar")=false, python::arg("ignoreHs")=true),
               "Loop over the conformers in a molecule and canonicalize their orientation");
+  python::def("GetBondLength", &MolTransforms::getBondLength, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId")),
+             "Returns the bond length in angstrom between atoms i, j\n");
+  python::def("SetBondLength", &MolTransforms::setBondLength, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"), python::arg("value")),
+             "Sets the bond length in angstrom between atoms i, j; "
+             "all atoms bonded to atom j are moved\n");
+  python::def("GetAngleRad", &MolTransforms::getAngleRad, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"), python::arg("kAtomId")),
+             "Returns the angle in radians between atoms i, j, k\n");
+  python::def("GetAngleDeg", &MolTransforms::getAngleDeg, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"), python::arg("kAtomId")),
+             "Returns the angle in degrees between atoms i, j, k\n");
+  python::def("SetAngleRad", &MolTransforms::setAngleRad, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"),
+             python::arg("kAtomId"), python::arg("value")),
+             "Sets the angle in radians between atoms i, j, k; "
+             "all atoms bonded to atom k are moved\n");
+  python::def("SetAngleDeg", &MolTransforms::setAngleDeg, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"),
+             python::arg("kAtomId"), python::arg("value")),
+             "Sets the angle in degrees between atoms i, j, k; "
+             "all atoms bonded to atom k are moved\n");
+  python::def("GetDihedralRad", &MolTransforms::getDihedralRad, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"),
+             python::arg("kAtomId"), python::arg("lAtomId")),
+             "Returns the dihedral angle in radians between atoms i, j, k, l\n");
+  python::def("GetDihedralDeg", &MolTransforms::getDihedralDeg, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"),
+             python::arg("kAtomId"), python::arg("lAtomId")),
+             "Returns the dihedral angle in degrees between atoms i, j, k, l\n");
+  python::def("SetDihedralRad", &MolTransforms::setDihedralRad, (python::arg("conf"),
+             python::arg("iAtomId"), python::arg("jAtomId"), python::arg("kAtomId"),
+             python::arg("lAtomId"), python::arg("value")),
+             "Sets the dihedral angle in radians between atoms i, j, k, l; "
+             "all atoms bonded to atom l are moved\n");
+  python::def("SetDihedralDeg", &MolTransforms::setDihedralDeg,
+             "Sets the dihedral angle in degrees between atoms i, j, k, l; "
+             "all atoms bonded to atom l are moved\n");
 }
-
-              

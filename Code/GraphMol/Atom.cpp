@@ -295,7 +295,7 @@ int Atom::calcImplicitValence(bool strict) {
 
   // The d-block and f-block of the periodic table (i.e. transition metals,
   // lanthanoids and actinoids) have no default valence.
-  unsigned int dv = PeriodicTable::getTable()->getDefaultValence(d_atomicNum);
+  int dv = PeriodicTable::getTable()->getDefaultValence(d_atomicNum);
   if (dv==-1) {
     d_implicitValence = 0;
     return 0;
@@ -440,11 +440,18 @@ void Atom::expandQuery(Atom::QUERYATOM_QUERY *what,
 bool Atom::Match(Atom const *what) const {
   PRECONDITION(what,"bad query atom");
   bool res = getAtomicNum() == what->getAtomicNum();
+
   // special dummy--dummy match case:
   //   [*] matches [*],[1*],[2*],etc.
   //   [1*] only matches [*] and [1*]
   if(res){
-    if(!getAtomicNum()){
+    if(this->dp_mol && what->dp_mol &&
+       this->getOwningMol().getRingInfo()->isInitialized() &&
+       what->getOwningMol().getRingInfo()->isInitialized() &&
+       this->getOwningMol().getRingInfo()->numAtomRings(d_index) >
+       what->getOwningMol().getRingInfo()->numAtomRings(what->d_index)){
+      res=false;
+    } else if(!this->getAtomicNum()){
       // this is the new behavior, based on the isotopes:
       int tgt=this->getIsotope();
       int test=what->getIsotope();
@@ -455,17 +462,15 @@ bool Atom::Match(Atom const *what) const {
       // standard atom-atom match: The general rule here is that if this atom has a property that
       // deviates from the default, then the other atom should match that value.
       if( (this->getFormalCharge() && this->getFormalCharge()!=what->getFormalCharge()) ||
-          (this->getIsotope() && this->getIsotope()!=what->getIsotope()) ){
+          (this->getIsotope() && this->getIsotope()!=what->getIsotope()) ||
+          (this->getNumRadicalElectrons() && this->getNumRadicalElectrons()!=what->getNumRadicalElectrons())
+          ){
         res=false;
       }
     }
   }
   return res;
 }
-bool Atom::Match(const Atom::ATOM_SPTR what) const {
-  return Match(what.get());
-}
-
 void Atom::updatePropertyCache(bool strict) {
   calcExplicitValence(strict);
   calcImplicitValence(strict);

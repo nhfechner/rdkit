@@ -14,6 +14,7 @@
 #include "MolSupplier.h"
 #include "FileParsers.h"
 #include <GraphMol/SmilesParse/SmilesParse.h>
+#include <RDGeneral/LocaleSwitcher.h>
 
 
 #include <boost/tokenizer.hpp>
@@ -166,7 +167,7 @@ namespace RDKit {
   
   bool TDTMolSupplier::advanceToNextRecord(){
     PRECONDITION(dp_inStream,"no stream");
-    unsigned int pos;
+    std::streampos pos;
     bool res=false;
     while(1){
       if(dp_inStream->eof()) return false;
@@ -218,6 +219,7 @@ namespace RDKit {
 
   ROMol *TDTMolSupplier::parseMol(std::string inLine){
     PRECONDITION(dp_inStream,"no stream");
+    Utils::LocaleSwitcher ls;
     std::size_t startP=inLine.find("<");
     std::size_t endP=inLine.find_last_of(">");
     std::string smiles = inLine.substr(startP+1,endP-startP-1);
@@ -334,9 +336,9 @@ namespace RDKit {
     PRECONDITION(dp_inStream,"no stream");
     unsigned int holder=d_last;
     moveTo(idx);
-    unsigned int begP=d_molpos[idx];
+    std::streampos begP=d_molpos[idx];
     bool endHolder=df_end;
-    unsigned int endP;
+    std::streampos endP;
     try {
       moveTo(idx+1);
       endP=d_molpos[idx+1];

@@ -9,8 +9,8 @@
 //  which is included in the file license.txt, found at the root
 //  of the RDKit source tree.
 //
-#ifndef __RD_TORSIONANGLE_H__
-#define __RD_TORSIONANGLE_H__
+#ifndef __RD_MMFFTORSIONANGLE_H__
+#define __RD_MMFFTORSIONANGLE_H__
 
 #include <ForceField/Contrib.h>
 #include <boost/tuple/tuple.hpp>
@@ -60,6 +60,8 @@ namespace ForceFields {
       //! calculates and returns the torsional MMFF energy
       double calcTorsionEnergy(const double V1,
         const double V2, const double V3, const double cosPhi);
+      void calcTorsionGrad(RDGeom::Point3D *r, RDGeom::Point3D *t,
+        double *d, double **g, double &sinTerm, double &cosPhi);
     }
   }
 }

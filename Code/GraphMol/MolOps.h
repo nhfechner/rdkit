@@ -1,5 +1,6 @@
 //
 //  Copyright (C) 2001-2012 Greg Landrum and Rational Discovery LLC
+//  Copyright (c) 2014, Novartis Institutes for BioMedical Research Inc.
 //
 //   @@ All Rights Reserved @@
 //  This file is part of the RDKit.
@@ -11,6 +12,7 @@
 #define _RD_MOL_OPS_H_
 
 #include <vector>
+#include <map>
 #include <list>
 #include <boost/smart_ptr.hpp>
 #include <boost/dynamic_bitset.hpp>
@@ -90,6 +92,28 @@ namespace RDKit{
                                                        bool sanitizeFrags=true,
                                                        std::vector<int> *frags=0);
 
+    //! splits a molecule into pieces based on labels assigned using a query
+    /*!
+
+      \param mol     the molecule of interest
+      \param query   the query used to "label" the molecule for fragmentation
+      \param sanitizeFrags  toggles sanitization of the fragments after
+                            they are built
+      \param whiteList  if provided, only labels in the list will be kept
+      \param negateList if true, the white list logic will be inverted: only labels
+                        not in the list will be kept
+      
+      \return a map of the fragments and their labels
+      
+    */
+    template <typename T>
+    std::map<T,boost::shared_ptr<ROMol> > getMolFragsWithQuery(const ROMol &mol,
+                                                               T (*query)(const ROMol &,const Atom *),
+                                                               bool sanitizeFrags=true,
+                                                               const std::vector<T> *whiteList=0,
+                                                               bool negateList=false);
+
+
 #if 0
     //! finds a molecule's minimium spanning tree (MST)
     /*!
@@ -138,7 +162,9 @@ namespace RDKit{
 	   - the caller is responsible for <tt>delete</tt>ing the pointer this returns.
      */
     ROMol *addHs(const ROMol &mol,bool explicitOnly=false,bool addCoords=false);
-
+    //! \overload
+    // modifies the molecule in place
+    void addHs(RWMol &mol,bool explicitOnly=false,bool addCoords=false);
 
     //! returns a copy of a molecule with hydrogens removed
     /*!
@@ -158,11 +184,17 @@ namespace RDKit{
              all atoms removed.
            - Labelled hydrogen (e.g. atoms with atomic number=1, but mass > 1),
              will not be removed.
+           - two coordinate Hs, like the central H in C[H-]C, will not be removed
+           - Hs connected to dummy atoms will not be removed
 
 	   - the caller is responsible for <tt>delete</tt>ing the pointer this returns.
     */
     ROMol *removeHs(const ROMol &mol,bool implicitOnly=false,
 			   bool updateExplicitCount=false,bool sanitize=true);
+    //! \overload
+    // modifies the molecule in place
+    void removeHs(RWMol &mol,bool implicitOnly=false,
+                  bool updateExplicitCount=false,bool sanitize=true);
 
     //! returns a copy of a molecule with hydrogens removed and added as queries
     //!  to the heavy atoms to which they are bound.
@@ -182,10 +214,30 @@ namespace RDKit{
         - Hydrogens which aren't connected to a heavy atom will not be
           removed.  This prevents molecules like <tt>"[H][H]"</tt> from having
           all atoms removed.
-	      - the caller is responsible for <tt>delete</tt>ing the pointer this returns.
+        - the caller is responsible for <tt>delete</tt>ing the pointer this returns.
 	
     */
     ROMol *mergeQueryHs(const ROMol &mol);
+    //! \overload
+    // modifies the molecule in place
+    void mergeQueryHs(RWMol &mol);
+
+    //! returns a copy of a molecule with the atoms renumbered
+    /*!
+      
+      \param mol the molecule to work with
+      \param newOrder the new ordering of the atoms (should be numAtoms long)
+         for example: if newOrder is [3,2,0,1], then atom 3 in the original 
+         molecule will be atom 0 in the new one
+     
+      \return the new molecule 
+
+      <b>Notes:</b>
+        - the caller is responsible for <tt>delete</tt>ing the pointer this returns.
+	
+    */
+    ROMol *renumberAtoms(const ROMol &mol,const std::vector<unsigned int> &newOrder);
+    
     //@}
 
     //! \name Sanitization
@@ -502,6 +554,29 @@ namespace RDKit{
 				  bool useAtomWts=false);
 
 
+    //! Computes the molecule's 3D distance matrix
+    /*!
+      
+      \param mol             the molecule of interest
+      \param confId          the conformer to use
+      \param useAtomWts      sets the diagonal elements of the result to
+               6.0/(atomic number)
+      \param force           forces calculation of the matrix, even if already computed
+      \param propNamePrefix  used to set the cached property name
+
+      \return the distance matrix.
+
+      <b>Notes</b>
+        - The result of this is cached in the molecule's local property dictionary,
+	  which will handle deallocation. Do the caller should <b>not</b> \c delete
+	  this pointer.
+     
+    */
+    double *get3DDistanceMat(const ROMol &mol,
+                             int confId=-1,
+                             bool useAtomWts=false,
+                             bool force=false,
+                             const char *propNamePrefix=0);
     //! Find the shortest path between two atoms
     /*!
       Uses the Bellman-Ford algorithm
@@ -641,6 +716,9 @@ namespace RDKit{
     */
     void findPotentialStereoBonds(ROMol &mol,bool cleanIt=false);
     //@}
+
+    //! returns the number of atoms which have a particular property set
+    unsigned getNumAtomsWithDistinctProperty(const ROMol& mol, std::string prop);
 
   }; // end of namespace MolOps
 }; // end of namespace RDKit

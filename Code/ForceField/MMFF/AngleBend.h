@@ -9,8 +9,8 @@
 //  which is included in the file license.txt, found at the root
 //  of the RDKit source tree.
 //
-#ifndef __RD_ANGLEBEND_H__
-#define __RD_ANGLEBEND_H__
+#ifndef __RD_MMFFANGLEBEND_H__
+#define __RD_MMFFANGLEBEND_H__
 
 #include <ForceField/ForceField.h>
 #include <ForceField/Contrib.h>
@@ -58,7 +58,9 @@ namespace ForceFields {
       //! calculates and returns the angle bending MMFF energy
       double calcAngleBendEnergy(const double theta0,
         const double ka, bool isLinear, const double cosTheta);
-    }  
+      void calcAngleBendGrad(RDGeom::Point3D *r, double *dist,
+        double **g, double &dE_dTheta, double &cosTheta, double &sinTheta);
+    }
   }
 }
 #endif

@@ -25,6 +25,7 @@
 #include <GraphMol/ForceFieldHelpers/UFF/Builder.h>
 #include <ForceField/ForceField.h>
 #include <GraphMol/DistGeomHelpers/Embedder.h>
+#include <boost/math/special_functions/round.hpp>
 
 using namespace RDKit;
 #if 1
@@ -776,7 +777,7 @@ void testMissingParams(){
     UFF::AtomicParamVect types;
     bool foundAll;
 
-    RWMol *mol = SmilesToMol("[Cu](C)(C)(C)(C)C");
+    ROMol *mol = SmilesToMol("[Cu](C)(C)(C)(C)C");
     TEST_ASSERT(mol);
 
     ROMol *mol2 = MolOps::addHs(*mol);
@@ -883,6 +884,122 @@ void testGitHubIssue62() {
     BOOST_LOG(rdErrorLog) << "  done" << std::endl;
   }
 }
+void testUFFParamGetters()
+{
+  BOOST_LOG(rdErrorLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdErrorLog) << "    Test UFF force-field parameter getters." << std::endl;
+  {
+    ROMol *mol = SmilesToMol("c1ccccc1CCNN");
+    TEST_ASSERT(mol);
+    ROMol *molH = MolOps::addHs(*mol);
+    TEST_ASSERT(molH);
+    ForceFields::UFF::UFFBond uffBondStretchParams;
+    TEST_ASSERT(UFF::getUFFBondStretchParams(*molH, 6, 7, uffBondStretchParams));
+    TEST_ASSERT(((int)boost::math::round(uffBondStretchParams.kb * 1000) == 699592)
+      && ((int)boost::math::round(uffBondStretchParams.r0 * 1000) == 1514));
+    TEST_ASSERT(!UFF::getUFFBondStretchParams(*molH, 0, 7, uffBondStretchParams));
+    ForceFields::UFF::UFFAngle uffAngleBendParams;
+    TEST_ASSERT(UFF::getUFFAngleBendParams(*molH, 6, 7, 8, uffAngleBendParams));
+    TEST_ASSERT(((int)boost::math::round(uffAngleBendParams.ka * 1000) == 143325)
+      && ((int)boost::math::round(uffAngleBendParams.theta0 * 1000) == 109470));
+    TEST_ASSERT(!UFF::getUFFAngleBendParams(*molH, 0, 7, 8, uffAngleBendParams));
+    ForceFields::UFF::UFFTor uffTorsionParams;
+    TEST_ASSERT(UFF::getUFFTorsionParams(*molH, 6, 7, 8, 9, uffTorsionParams));
+    TEST_ASSERT(((int)boost::math::round(uffTorsionParams.V * 1000) == 976));
+    TEST_ASSERT(!UFF::getUFFTorsionParams(*molH, 0, 7, 8, 9, uffTorsionParams));
+    ForceFields::UFF::UFFInv uffInversionParams;
+    TEST_ASSERT(UFF::getUFFInversionParams(*molH, 6, 5, 4, 0, uffInversionParams));
+    TEST_ASSERT(((int)boost::math::round(uffInversionParams.K * 1000) == 2000));
+    TEST_ASSERT(!UFF::getUFFInversionParams(*molH, 6, 5, 4, 1, uffInversionParams));
+    ForceFields::UFF::UFFVdW uffVdWParams;
+    TEST_ASSERT(UFF::getUFFVdWParams(*molH, 0, 9, uffVdWParams));
+    TEST_ASSERT(((int)boost::math::round(uffVdWParams.x_ij * 1000) == 3754)
+      && ((int)boost::math::round(uffVdWParams.D_ij * 1000) == 85));
+  }
+}
+
+#ifdef RDK_TEST_MULTITHREADED
+namespace {
+  void runblock_uff(const std::vector<ROMol *> &mols,const std::vector<double> &energies,
+                unsigned int count,unsigned int idx){
+    for(unsigned int rep=0;rep<1000;++rep){
+      for(unsigned int i=0;i<mols.size();++i){
+        if(i%count != idx) continue;
+        ROMol *mol = mols[i];
+        ForceFields::ForceField *field = 0;
+        if(!(rep%100)) BOOST_LOG(rdErrorLog) << "Rep: "<<rep<<" Mol:" << i << std::endl;
+        try {
+          field = UFF::constructForceField(*mol);
+        } catch (...) {
+          field = 0;
+        }
+        TEST_ASSERT(field);
+        field->initialize();
+        int failed = field->minimize(500);
+        TEST_ASSERT(!failed);
+        double eng=field->calcEnergy();
+        TEST_ASSERT(feq(eng,energies[i]));
+        delete field;
+      }
+    }
+  }
+}
+#include <boost/thread.hpp>  
+void testUFFMultiThread(){
+  BOOST_LOG(rdErrorLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdErrorLog) << "    Test UFF multithreading" << std::endl;
+
+  ForceFields::ForceField *field;
+
+  std::string pathName = getenv("RDBASE");
+  pathName += "/Code/GraphMol/ForceFieldHelpers/UFF/test_data";
+  SDMolSupplier suppl(pathName + "/bulk.sdf");
+  std::vector<ROMol *> mols;
+  while(!suppl.atEnd()&&mols.size()<100){
+    ROMol *mol=0;
+    try{
+      mol=suppl.next();
+    } catch(...){
+      continue;
+    }
+    if(!mol) continue;
+    mols.push_back(mol);
+  }
+
+  std::cerr<<"generating reference data"<<std::endl;
+  std::vector<double> energies(mols.size(),0.0);
+  for(unsigned int i=0;i<mols.size();++i){
+    ROMol mol(*mols[i]);
+    ForceFields::ForceField *field = 0;
+    try {
+      field = UFF::constructForceField(mol);
+    } catch (...) {
+      field = 0;
+    }
+    TEST_ASSERT(field);
+    field->initialize();
+    int failed = field->minimize(500);
+    TEST_ASSERT(!failed);
+    energies[i]=field->calcEnergy();
+    delete field;
+  }
+  
+  boost::thread_group tg;
+
+  std::cerr<<"processing"<<std::endl;
+  unsigned int count=4;
+  for(unsigned int i=0;i<count;++i){
+    std::cerr<<" launch :"<<i<<std::endl;std::cerr.flush();
+    tg.add_thread(new boost::thread(runblock_uff,mols,energies,count,i));
+  }
+  tg.join_all();
+  
+  BOOST_FOREACH(ROMol *mol,mols){
+    delete mol;
+  }
+  BOOST_LOG(rdErrorLog) << "  done" << std::endl;
+}
+#endif
 
 //-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 //
@@ -900,8 +1017,12 @@ int main(){
   testIssue242();
   testSFIssue1653802();
   testSFIssue2378119();
+  testUFFParamGetters();
 #endif
   testMissingParams();
   testSFIssue3009337();
   testGitHubIssue62();
+#ifdef RDK_TEST_MULTITHREADED
+  testUFFMultiThread();
+#endif
 }

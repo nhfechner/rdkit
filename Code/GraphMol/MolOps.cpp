@@ -1,6 +1,7 @@
 // $Id$
 //
-//  Copyright (C) 2001-2010 Greg Landrum and Rational Discovery LLC
+//  Copyright (C) 2001-2012 Greg Landrum and Rational Discovery LLC
+//  Copyright (c) 2014, Novartis Institutes for BioMedical Research Inc.
 //
 //   @@ All Rights Reserved @@
 //  This file is part of the RDKit.
@@ -30,6 +31,7 @@
 
 #include <boost/config.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <GraphMol/ROMol.h>
 
 const int ci_LOCAL_INF=static_cast<int>(1e8);
 
@@ -366,6 +368,87 @@ namespace RDKit{
       }
       return frags.size();
     }
+
+
+    template <typename T>
+    std::map<T,boost::shared_ptr<ROMol> > getMolFragsWithQuery(const ROMol &mol,
+                                                               T (*query)(const ROMol &,const Atom *),
+                                                               bool sanitizeFrags,
+                                                               const std::vector<T> *whiteList,
+                                                               bool negateList){
+      PRECONDITION(query,"no query");
+
+      std::vector<T> assignments(mol.getNumAtoms());
+      std::vector<int> ids(mol.getNumAtoms(),-1);
+      std::map<T,boost::shared_ptr<ROMol> > res;
+      for(unsigned int i=0;i<mol.getNumAtoms();++i){
+        T where=query(mol,mol.getAtomWithIdx(i));
+        if(whiteList){
+          bool found=std::find(whiteList->begin(),whiteList->end(),where)!=whiteList->end();
+          if(!found && !negateList) continue;
+          else if (found && negateList) continue;
+        }
+        assignments[i]=where;
+        if(res.find(where)==res.end()){
+          res[where]=boost::shared_ptr<ROMol>(new ROMol());
+        }
+        RWMol *frag=static_cast<RWMol *>(res[where].get());
+        ids[i]=frag->addAtom(mol.getAtomWithIdx(i)->copy(),false,true);
+        // loop over neighbors and add bonds in the fragment to all atoms
+        // that are already in the same fragment
+        ROMol::ADJ_ITER nbrIdx,endNbrs;
+        boost::tie(nbrIdx,endNbrs) = mol.getAtomNeighbors(mol.getAtomWithIdx(i));
+        while(nbrIdx!=endNbrs){
+          if(*nbrIdx<i && assignments[*nbrIdx]==where){
+            Bond *nBond=mol.getBondBetweenAtoms(i,*nbrIdx)->copy();
+            nBond->setOwningMol(static_cast<ROMol *>(frag));
+            nBond->setBeginAtomIdx(ids[nBond->getBeginAtomIdx()]);
+            nBond->setEndAtomIdx(ids[nBond->getEndAtomIdx()]);
+            frag->addBond(nBond,true);
+          }
+          ++nbrIdx;
+        }        
+      }
+      // update conformers
+      for(ROMol::ConstConformerIterator cit=mol.beginConformers();
+          cit!=mol.endConformers();++cit){
+        for(typename std::map<T,boost::shared_ptr<ROMol> >::iterator iter=res.begin();
+            iter!=res.end();++iter){
+          ROMol *newM=iter->second.get();
+          Conformer *conf=new Conformer(newM->getNumAtoms());
+          conf->setId((*cit)->getId());
+          conf->set3D((*cit)->is3D());
+          newM->addConformer(conf);
+        }
+        for(unsigned int i=0;i<mol.getNumAtoms();++i){
+          if(ids[i]<0) continue;
+          res[assignments[i]]->getConformer((*cit)->getId()).setAtomPos(ids[i],(*cit)->getAtomPos(i));
+        }
+      }
+      if(sanitizeFrags){
+        for(typename std::map<T,boost::shared_ptr<ROMol> >::iterator iter=res.begin();
+            iter!=res.end();++iter){
+          sanitizeMol(*static_cast<RWMol *>(iter->second.get()));
+        }
+      }
+      return res;
+    }
+    template std::map<std::string,boost::shared_ptr<ROMol> > getMolFragsWithQuery(const ROMol &mol,
+                                                                                  std::string (*query)(const ROMol &,const Atom *),
+                                                                                  bool sanitizeFrags,
+                                                                                  const std::vector<std::string> *,
+                                                                                  bool);
+    template std::map<int,boost::shared_ptr<ROMol> > getMolFragsWithQuery(const ROMol &mol,
+                                                                          int (*query)(const ROMol &,const Atom *),
+                                                                          bool sanitizeFrags,
+                                                                          const std::vector<int> *,
+                                                                          bool);
+    template std::map<unsigned int,boost::shared_ptr<ROMol> > getMolFragsWithQuery(const ROMol &mol,
+                                                                                   unsigned int (*query)(const ROMol &,const Atom *),
+                                                                                   bool sanitizeFrags,
+                                                                                   const std::vector<unsigned int> *,
+                                                                                   bool);
+
 #if 0
     void findSpanningTree(const ROMol &mol,INT_VECT &mst){
       //
@@ -435,5 +518,17 @@ namespace RDKit{
       }
       return accum;
     };
+
+    unsigned getNumAtomsWithDistinctProperty(const ROMol& mol, std::string prop)
+    {
+      unsigned numPropAtoms=0;
+      for (ROMol::ConstAtomIterator ai = mol.beginAtoms();
+      	  ai != mol.endAtoms(); ++ai) {
+        if((*ai)->hasProp(prop)){
+      	  ++numPropAtoms;
+        }
+      }
+      return numPropAtoms;
+    }
   }; // end of namespace MolOps
 }; // end of namespace RDKit

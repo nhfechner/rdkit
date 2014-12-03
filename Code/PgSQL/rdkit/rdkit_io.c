@@ -120,17 +120,17 @@ Datum           mol_from_ctab(PG_FUNCTION_ARGS);
 Datum
 mol_from_ctab(PG_FUNCTION_ARGS) {
   char    *data = PG_GETARG_CSTRING(0);
+  bool keepConformer = PG_GETARG_BOOL(1);
   CROMol  mol;
   Mol     *res;
 
-  mol = parseMolCTAB(data,false,true);
+  mol = parseMolCTAB(data,keepConformer,true);
   if(!mol) PG_RETURN_NULL();
   res = deconstructROMol(mol);
   freeCROMol(mol);
 
   PG_RETURN_MOL_P(res);           
 }
-
 
 PG_FUNCTION_INFO_V1(mol_from_smarts);
 Datum           mol_from_smarts(PG_FUNCTION_ARGS);
@@ -162,6 +162,26 @@ mol_from_smiles(PG_FUNCTION_ARGS) {
   freeCROMol(mol);
 
   PG_RETURN_MOL_P(res);           
+}
+
+PG_FUNCTION_INFO_V1(mol_to_ctab);
+Datum           mol_to_ctab(PG_FUNCTION_ARGS);
+Datum
+mol_to_ctab(PG_FUNCTION_ARGS) {
+  CROMol  mol;
+  char    *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchMolCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &mol, NULL);
+
+  bool createDepictionIfMissing = PG_GETARG_BOOL(1);
+  str = makeCtabText(mol, &len, createDepictionIfMissing);
+
+  PG_RETURN_CSTRING( pnstrdup(str, len) );
 }
 
 PG_FUNCTION_INFO_V1(mol_to_smiles);
@@ -370,4 +390,193 @@ rdkit_version(PG_FUNCTION_ARGS) {
 
   PG_RETURN_TEXT_P(cstring_to_text(buf));
 }
+
+
+/* chemical reactions */
+
+PG_FUNCTION_INFO_V1(reaction_in);
+Datum           reaction_in(PG_FUNCTION_ARGS);
+Datum
+reaction_in(PG_FUNCTION_ARGS) {
+  char    *data = PG_GETARG_CSTRING(0);
+  CChemicalReaction  rxn;
+  ChemReactionBA     *rxnBA;
+
+  rxn = parseChemReactText(data,false,false);
+
+  if(!rxn){
+    ereport(ERROR,
+            (errcode(ERRCODE_DATA_EXCEPTION),
+             errmsg("could not construct chemical reaction")));
+  }
+  rxnBA = deconstructChemReact(rxn);
+  freeChemReaction(rxn);
+
+  PG_RETURN_CHEMREACTION_P(rxnBA);           
+}
+
+PG_FUNCTION_INFO_V1(reaction_recv);
+Datum           reaction_recv(PG_FUNCTION_ARGS);
+Datum
+reaction_recv(PG_FUNCTION_ARGS) {
+  bytea    *data = PG_GETARG_BYTEA_P(0);
+  int len=VARSIZE(data)-VARHDRSZ;
+  CChemicalReaction  rxn;
+  ChemReactionBA     *rxnBA;
+
+  rxn = parseChemReactBlob(VARDATA(data),len);
+
+  rxnBA = deconstructChemReact(rxn);
+  freeChemReaction(rxn);
+
+  PG_FREE_IF_COPY(data, 0);
+
+  PG_RETURN_CHEMREACTION_P(rxnBA);           
+}
+
+
+PG_FUNCTION_INFO_V1(reaction_out);
+Datum           reaction_out(PG_FUNCTION_ARGS);
+Datum
+reaction_out(PG_FUNCTION_ARGS) {
+	CChemicalReaction  rxn;
+  char    *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchChemReactionCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &rxn, NULL);
+  str = makeChemReactText(rxn, &len,false);
+
+  PG_RETURN_CSTRING( pnstrdup(str, len) );
+}
+
+PG_FUNCTION_INFO_V1(reaction_send);
+Datum           reaction_send(PG_FUNCTION_ARGS);
+Datum
+reaction_send(PG_FUNCTION_ARGS) {
+	CChemicalReaction  rxn;
+  bytea    *res;
+  char *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchChemReactionCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &rxn, NULL);
+  str = makeChemReactBlob(rxn, &len);
+
+  res=(bytea *)palloc(len+VARHDRSZ);
+  SET_VARSIZE(res,len+VARHDRSZ);
+  memcpy(VARDATA(res),str,len);
+  PG_RETURN_BYTEA_P( res );
+}
+
+PG_FUNCTION_INFO_V1(reaction_from_ctab);
+Datum           reaction_from_ctab(PG_FUNCTION_ARGS);
+Datum
+reaction_from_ctab(PG_FUNCTION_ARGS) {
+  char    *data = PG_GETARG_CSTRING(0);
+  CChemicalReaction  rxn;
+  ChemReactionBA     *rxnBA;
+
+  rxn = parseChemReactCTAB(data,true);
+  if(!rxn) PG_RETURN_NULL();
+  rxnBA = deconstructChemReact(rxn);
+  freeChemReaction(rxn);
+
+  PG_RETURN_CHEMREACTION_P(rxnBA);
+}
+
+PG_FUNCTION_INFO_V1(reaction_from_smarts);
+Datum           reaction_from_smarts(PG_FUNCTION_ARGS);
+Datum
+reaction_from_smarts(PG_FUNCTION_ARGS) {
+  char    *data = PG_GETARG_CSTRING(0);
+  CChemicalReaction  rxn;
+  ChemReactionBA     *rxnBA;
+
+  rxn = parseChemReactText(data,true,true);
+  if(!rxn) PG_RETURN_NULL();
+  rxnBA = deconstructChemReact(rxn);
+  freeChemReaction(rxn);
+
+  PG_RETURN_CHEMREACTION_P(rxnBA);
+}
+
+PG_FUNCTION_INFO_V1(reaction_from_smiles);
+Datum           reaction_from_smiles(PG_FUNCTION_ARGS);
+Datum
+reaction_from_smiles(PG_FUNCTION_ARGS) {
+  char    *data = PG_GETARG_CSTRING(0);
+  CChemicalReaction  rxn;
+  ChemReactionBA     *rxnBA;
+
+  rxn = parseChemReactText(data,false,true);
+  if(!rxn) PG_RETURN_NULL();
+  rxnBA = deconstructChemReact(rxn);
+  freeChemReaction(rxn);
+
+  PG_RETURN_CHEMREACTION_P(rxnBA);
+}
+
+PG_FUNCTION_INFO_V1(reaction_to_ctab);
+Datum           reaction_to_ctab(PG_FUNCTION_ARGS);
+Datum
+reaction_to_ctab(PG_FUNCTION_ARGS) {
+  CChemicalReaction  rxn;
+  char    *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchChemReactionCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &rxn, NULL);
+
+  str = makeCTABChemReact(rxn, &len);
+
+  PG_RETURN_CSTRING( pnstrdup(str, len) );
+}
+
+PG_FUNCTION_INFO_V1(reaction_to_smiles);
+Datum           reaction_to_smiles(PG_FUNCTION_ARGS);
+Datum
+reaction_to_smiles(PG_FUNCTION_ARGS) {
+  CChemicalReaction  rxn;
+  char    *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchChemReactionCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &rxn, NULL);
+  str = makeChemReactText(rxn, &len,false);
+
+  PG_RETURN_CSTRING( pnstrdup(str, len) );
+}
+
+
+PG_FUNCTION_INFO_V1(reaction_to_smarts);
+Datum           reaction_to_smarts(PG_FUNCTION_ARGS);
+Datum
+reaction_to_smarts(PG_FUNCTION_ARGS) {
+  CChemicalReaction  rxn;
+  char    *str;
+  int     len;
+
+  fcinfo->flinfo->fn_extra = SearchChemReactionCache(
+                                            fcinfo->flinfo->fn_extra,
+                                            fcinfo->flinfo->fn_mcxt,
+                                            PG_GETARG_DATUM(0),
+                                            NULL, &rxn, NULL);
+  str = makeChemReactText(rxn, &len,true);
+
+  PG_RETURN_CSTRING( pnstrdup(str, len) );
+}
+
 

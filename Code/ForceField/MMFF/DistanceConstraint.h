@@ -9,8 +9,8 @@
 //  which is included in the file license.txt, found at the root
 //  of the RDKit source tree.
 //
-#ifndef __RD_DISTANCECONSTRAINT_H__
-#define __RD_DISTANCECONSTRAINT_H__
+#ifndef __RD_MMFFDISTANCECONSTRAINT_H__
+#define __RD_MMFFDISTANCECONSTRAINT_H__
 #include <iostream>
 #include <ForceField/Contrib.h>
 
@@ -33,6 +33,8 @@ namespace ForceFields {
       */
       DistanceConstraintContrib(ForceField *owner, unsigned int idx1, unsigned int idx2,
 				double minLen, double maxLen, double forceConst);
+      DistanceConstraintContrib(ForceField *owner, unsigned int idx1, unsigned int idx2,
+				bool relative, double minLen, double maxLen, double forceConst);
 
       ~DistanceConstraintContrib() {
 	//std::cerr << " ==== Destroy constraint " << d_end1Idx << " " << d_end2Idx << std::endl;

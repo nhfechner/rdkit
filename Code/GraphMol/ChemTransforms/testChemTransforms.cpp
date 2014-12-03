@@ -182,6 +182,49 @@ void testReplaceSubstructs()
 }
 
 
+void testReplaceSubstructs2() 
+{
+  
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "More testing of replaceSubstruct" << std::endl;
+
+  {
+    std::string smi = "CCC(=O)O";
+    ROMol *mol1 = SmilesToMol(smi);
+    TEST_ASSERT(mol1);
+
+    std::string sma = "[$(O-C(=O))]";
+    ROMol *matcher1 = SmartsToMol(sma);
+    TEST_ASSERT(matcher1);
+
+    std::string repl = "NC";
+    ROMol *frag = SmilesToMol(repl);
+    TEST_ASSERT(frag);
+
+    std::vector<ROMOL_SPTR> vect=replaceSubstructs(*mol1,*matcher1,*frag);
+    TEST_ASSERT(vect.size()==1);
+    TEST_ASSERT(mol1->getNumAtoms()==5);
+    TEST_ASSERT(vect[0]->getNumAtoms()==6);
+    std::string csmi1 = MolToSmiles(*vect[0],true);
+
+    repl = "CN";
+    delete frag;
+    frag = SmilesToMol(repl);
+    TEST_ASSERT(frag);
+    vect=replaceSubstructs(*mol1,*matcher1,*frag,true,1);
+    TEST_ASSERT(vect.size()==1);
+    TEST_ASSERT(mol1->getNumAtoms()==5);
+    TEST_ASSERT(vect[0]->getNumAtoms()==6);
+    std::string csmi2 = MolToSmiles(*vect[0],true);
+    TEST_ASSERT(csmi2==csmi1);
+    delete mol1;
+    delete matcher1;
+  }
+
+  BOOST_LOG(rdInfoLog) << "\tdone" << std::endl;
+}
+
+
 void testReplaceSidechains() 
 {
   ROMol *mol1=0,*mol2=0,*matcher1=0;
@@ -844,7 +887,6 @@ void testIssue3453144()
 
 void testIssue3537675() 
 {
-  ROMol *mol1=0,*matcher1=0,*replacement=0;
   std::string smi,sma;
   
   BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
@@ -1383,6 +1425,47 @@ void benchFragmentOnBRICSBonds()
   BOOST_LOG(rdInfoLog) << "\tdone" << std::endl;
 }
 
+void testFragmentOnSomeBonds() 
+{
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "Testing fragmentOnSomeBonds"<< std::endl;
+
+  {
+    std::string smi = "OCCCCN";
+    RWMol *mol = SmilesToMol(smi);
+    TEST_ASSERT(mol);
+    TEST_ASSERT(mol->getNumAtoms());
+    unsigned int indices[]={0,2,4};
+    std::vector<unsigned int> bindices(indices,indices+(sizeof(indices)/sizeof(indices[0])));
+    std::vector<ROMOL_SPTR> frags;
+    MolFragmenter::fragmentOnSomeBonds(*mol,bindices,frags,2);
+    TEST_ASSERT(frags.size()==3);
+    std::vector<std::vector<int> > fragMap;
+
+    TEST_ASSERT(MolOps::getMolFrags(*frags[0],fragMap)==3);
+    TEST_ASSERT(fragMap.size()==3);
+    TEST_ASSERT(fragMap[0].size()==2);
+    TEST_ASSERT(fragMap[1].size()==4);
+    TEST_ASSERT(fragMap[2].size()==4);
+
+    TEST_ASSERT(MolOps::getMolFrags(*frags[1],fragMap)==3);
+    TEST_ASSERT(fragMap.size()==3);
+    TEST_ASSERT(fragMap[0].size()==2);
+    TEST_ASSERT(fragMap[1].size()==6);
+    TEST_ASSERT(fragMap[2].size()==2);
+
+    TEST_ASSERT(MolOps::getMolFrags(*frags[2],fragMap)==3);
+    TEST_ASSERT(fragMap.size()==3);
+    TEST_ASSERT(fragMap[0].size()==4);
+    TEST_ASSERT(fragMap[1].size()==4);
+    TEST_ASSERT(fragMap[2].size()==2);
+    
+    delete mol;
+  }
+
+  BOOST_LOG(rdInfoLog) << "\tdone" << std::endl;
+}
+
 
 int main() { 
   RDLog::InitLogs();
@@ -1393,6 +1476,7 @@ int main() {
 #if 1
   testDeleteSubstruct();
   testReplaceSubstructs();
+  testReplaceSubstructs2();
   testReplaceSidechains();
   testReplaceCore();
   testReplaceCoreLabels();
@@ -1411,8 +1495,9 @@ int main() {
   testIssue275();
 
   testFragmentOnBonds();
-#endif
   testFragmentOnBRICSBonds();
+#endif
+  testFragmentOnSomeBonds();
   //benchFragmentOnBRICSBonds();
 
   BOOST_LOG(rdInfoLog) << "*******************************************************\n";

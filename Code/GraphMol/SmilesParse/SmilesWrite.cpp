@@ -38,7 +38,8 @@ namespace RDKit{
     }
 
 
-    std::string GetAtomSmiles(const Atom *atom,bool doKekule,const Bond *bondIn){
+    std::string GetAtomSmiles(const Atom *atom,bool doKekule,const Bond *bondIn,
+                              bool allHsExplicit){
       PRECONDITION(atom,"bad atom");
       INT_VECT atomicSmilesVect(atomicSmiles,
                                 atomicSmiles+(sizeof(atomicSmiles)-1)/sizeof(atomicSmiles[0]));
@@ -55,7 +56,7 @@ namespace RDKit{
         symb=PeriodicTable::getTable()->getElementSymbol(num);
       }
       //symb = atom->getSymbol();
-      if(inOrganicSubset(num)){
+      if(!allHsExplicit && inOrganicSubset(num)){
         // it's a member of the organic subset
         //if(!doKekule && atom->getIsAromatic() && symb[0] < 'a') symb[0] -= ('A'-'a');
 
@@ -69,17 +70,16 @@ namespace RDKit{
         //   - atom-map information present
         const INT_VECT &defaultVs=PeriodicTable::getTable()->getValenceList(num);
         int totalValence= atom->getTotalValence();
-        bool nonStandard;
-        nonStandard = std::find(defaultVs.begin(),defaultVs.end(),
-                                totalValence)==defaultVs.end();
-        // another type of "nonstandard" valence is an aromatic N or P with
-        // explicit Hs indicated:
-        if((num==7||num==15) && atom->getIsAromatic() && atom->getNumExplicitHs()){
-          nonStandard=true;
-        }
+        bool nonStandard=false;
 
         if(atom->getNumRadicalElectrons()){
           nonStandard=true;
+        } else if((num==7||num==15) && atom->getIsAromatic() && atom->getNumExplicitHs()){
+          // another type of "nonstandard" valence is an aromatic N or P with
+          // explicit Hs indicated:
+          nonStandard=true;
+        } else {
+          nonStandard = (totalValence!=defaultVs.front() && atom->getTotalNumHs());
         }
 
         if(fc || nonStandard){
@@ -110,18 +110,11 @@ namespace RDKit{
       }
       res << symb;
 
-      bool chiralityIncluded=false;
       if(atom->getOwningMol().hasProp("_doIsoSmiles") &&
          atom->getChiralTag()!=Atom::CHI_UNSPECIFIED ){
         INT_LIST trueOrder;
         atom->getProp("_TraversalBondIndexOrder",trueOrder);
         int nSwaps=  atom->getPerturbationOrder(trueOrder);
-        // if( !atom->hasProp("_CIPCode") && atom->hasProp("_CIPRank") &&
-        //     !atom->getOwningMol().hasProp("_ringSteroWarning") ){
-        //   BOOST_LOG(rdWarningLog)<<"Warning: ring stereochemistry detected. The output SMILES is not canonical."<<std::endl;
-        //   atom->getOwningMol().setProp("_ringStereoWarning",true,true);
-        // }
-
         if(atom->getDegree()==3 && !bondIn){
           // This is a special case. Here's an example:
           //   Our internal representation of a chiral center is equivalent to:
@@ -138,14 +131,12 @@ namespace RDKit{
             atStr = "@@";
           else
             atStr = "@";
-          chiralityIncluded=true;
           break;
         case Atom::CHI_TETRAHEDRAL_CCW:
           if(!(nSwaps%2))
             atStr = "@";
           else
             atStr = "@@";
-          chiralityIncluded=true;
           break;
         default:
           break;
@@ -271,7 +262,7 @@ namespace RDKit{
     std::string FragmentSmilesConstruct(ROMol &mol,int atomIdx,
                                         std::vector<Canon::AtomColors> &colors,
                                         INT_VECT &ranks,bool doKekule,bool canonical,
-                                        bool allBondsExplicit,
+                                        bool allBondsExplicit,bool allHsExplicit,
                                         std::vector<unsigned int> &atomOrdering,
                                         const boost::dynamic_bitset<> *bondsInPlay=0,
                                         const std::vector<std::string> *atomSymbols=0,
@@ -305,7 +296,7 @@ namespace RDKit{
           }
           //std::cout<<"\t\tAtom: "<<mSE.obj.atom->getIdx()<<std::endl;
           if(!atomSymbols){
-            res << GetAtomSmiles(mSE.obj.atom,doKekule,bond);
+            res << GetAtomSmiles(mSE.obj.atom,doKekule,bond,allHsExplicit);
           } else {
             res << (*atomSymbols)[mSE.obj.atom->getIdx()];
           }
@@ -354,7 +345,7 @@ namespace RDKit{
           if(closureVal >= 10){
             res << "%";
           }
-          //std::cout << " > " << closureVal <<std::endl;
+          //std::cerr << " > " << closureVal <<std::endl;
           res << closureVal;
           break;
         case Canon::MOL_STACK_BRANCH_OPEN:
@@ -375,10 +366,10 @@ namespace RDKit{
 
   std::string MolToSmiles(const ROMol &mol,bool doIsomericSmiles,
                           bool doKekule,int rootedAtAtom,bool canonical,
-                          bool allBondsExplicit){
+                          bool allBondsExplicit,bool allHsExplicit){
+    if(!mol.getNumAtoms()) return "";
     PRECONDITION(rootedAtAtom<0||static_cast<unsigned int>(rootedAtAtom)<mol.getNumAtoms(),
                  "rootedAtomAtom must be less than the number of atoms");
-    if(!mol.getNumAtoms()) return "";
 
     ROMol tmol(mol,true);
     if(doIsomericSmiles){
@@ -454,7 +445,8 @@ namespace RDKit{
       CHECK_INVARIANT(nextAtomIdx>=0,"no start atom found");
 
       subSmi = SmilesWrite::FragmentSmilesConstruct(tmol, nextAtomIdx, colors,
-                                                    ranks,doKekule,canonical,allBondsExplicit,
+                                                    ranks,doKekule,canonical,
+                                                    allBondsExplicit,allHsExplicit,
                                                     atomOrdering);
 
       res += subSmi;
@@ -476,7 +468,8 @@ namespace RDKit{
                                   bool doKekule,
                                   int rootedAtAtom,
                                   bool canonical,
-                                  bool allBondsExplicit){
+                                  bool allBondsExplicit,
+                                  bool allHsExplicit){
     PRECONDITION(atomsToUse.size(),
                  "no atoms provided");
     PRECONDITION(rootedAtAtom<0||static_cast<unsigned int>(rootedAtAtom)<mol.getNumAtoms(),
@@ -549,7 +542,6 @@ namespace RDKit{
       (*atIt)->updatePropertyCache(false);
     }
 
-    unsigned int nAtoms=atomsToUse.size();
     INT_VECT ranks(tmol.getNumAtoms(),-1);
 
     std::vector<unsigned int> atomOrdering;
@@ -610,7 +602,8 @@ namespace RDKit{
       CHECK_INVARIANT(nextAtomIdx>=0,"no start atom found");
 
       subSmi = SmilesWrite::FragmentSmilesConstruct(tmol, nextAtomIdx, colors,
-                                                    ranks,doKekule,canonical,allBondsExplicit,
+                                                    ranks,doKekule,canonical,
+                                                    allBondsExplicit,allHsExplicit,
                                                     atomOrdering,
                                                     &bondsInPlay,
                                                     atomSymbols,bondSymbols);

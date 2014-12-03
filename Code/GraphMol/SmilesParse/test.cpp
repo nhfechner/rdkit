@@ -1,6 +1,6 @@
 // $Id$
 //
-//  Copyright (C) 2003-2011 Rational Discovery LLC
+//  Copyright (C) 2003-2014 Rational Discovery LLC
 //
 //   @@ All Rights Reserved @@
 //  This file is part of the RDKit.
@@ -9,9 +9,11 @@
 //  of the RDKit source tree.
 //
 #include <iostream>
+#include <string>
 #include <GraphMol/RDKitBase.h>
 #include "SmilesParse.h"
 #include "SmilesWrite.h"
+#include <GraphMol/FileParsers/FileParsers.h>
 #include <RDGeneral/RDLog.h>
 //#include <boost/log/functions.hpp>
 using namespace RDKit;
@@ -52,6 +54,7 @@ void testPass(){
     "Cl/C=C\\Cl",
     "Cl/C=C/Cl",
     "Cl/C=C\\Cl",
+    "Cl/C=C\\\\Cl",
     "C1CC.CC1",
     "C1C(C2CC2).C2CC2C1",
     "[Na+].[Cl-].[NH4+].[Cl-]",
@@ -1151,6 +1154,16 @@ void testIssue159(){
   smi = MolToSmiles(*mol,1);
   TEST_ASSERT(refSmi==smi);
 
+  delete mol;
+  smi = "C(\\\\C)=C/O";
+  mol = SmilesToMol(smi);
+  TEST_ASSERT(mol);
+
+  TEST_ASSERT(mol->getBondWithIdx(0)->getStereo() == Bond::STEREONONE);
+  TEST_ASSERT(mol->getBondWithIdx(1)->getStereo() == Bond::STEREOE);
+  smi = MolToSmiles(*mol,1);
+  TEST_ASSERT(refSmi==smi);
+
 
   delete mol;
   smi = "C(=C/O)\\C";
@@ -1414,7 +1427,6 @@ void testIssue184(){
   }
 
   smi = MolToSmiles(*mol,1);
-  std::cerr<<"  "<<refSmi<<"\n"<<"  "<<smi<<std::endl;
   TEST_ASSERT(refSmi==smi);
   
   BOOST_LOG(rdInfoLog) << "\tdone" << std::endl;
@@ -1598,21 +1610,32 @@ void testIssue266(){
 }
 
 void testRootedAt(){
-  RWMol *mol;
-  std::string smi;
-
   BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
   BOOST_LOG(rdInfoLog) << "Testing rootedAtAtom functionality" << std::endl;
 
-  smi ="CN(C)C";
-  mol = SmilesToMol(smi);
-  TEST_ASSERT(mol);
-  smi = MolToSmiles(*mol,false,false,-1);
-  TEST_ASSERT(smi=="CN(C)C");
-  smi = MolToSmiles(*mol,false,false,1);
-  TEST_ASSERT(smi=="N(C)(C)C");
-  smi = MolToSmiles(*mol,false,false,2);
-  TEST_ASSERT(smi=="CN(C)C");
+  {
+    RWMol *mol;
+    std::string smi;
+    smi ="CN(C)C";
+    mol = SmilesToMol(smi);
+    TEST_ASSERT(mol);
+    smi = MolToSmiles(*mol,false,false,-1);
+    TEST_ASSERT(smi=="CN(C)C");
+    smi = MolToSmiles(*mol,false,false,1);
+    TEST_ASSERT(smi=="N(C)(C)C");
+    smi = MolToSmiles(*mol,false,false,2);
+    TEST_ASSERT(smi=="CN(C)C");
+    delete mol;
+  }
+  {
+    // This was github issue #182:
+    RWMol mol;
+    std::string smi;
+    smi = MolToSmiles(mol);
+    TEST_ASSERT(smi=="");
+    smi = MolToSmiles(mol,false,false,0);
+    TEST_ASSERT(smi=="");
+  }
 
   
   BOOST_LOG(rdInfoLog) << "\tdone" << std::endl;
@@ -2213,7 +2236,7 @@ void testBug1942220(){
   TEST_ASSERT(m->getNumAtoms()==4);
   //TEST_ASSERT(m->getNumAtoms(false)==5);
   smi = MolToSmiles(*m);
-  TEST_ASSERT(smi=="O=S(=O)O");
+  TEST_ASSERT(smi=="O=[SH](=O)O");
 
   
   delete m;
@@ -2307,7 +2330,6 @@ void testBug3139534(){
     m = SmilesToMol(smiles);
     TEST_ASSERT(m);
     smiles = MolToSmiles(*m,true,false,-1,false);
-    std::cerr<<smiles<<std::endl;
     //TEST_ASSERT(smiles=="C1CC/C=C/C=C/CCC1");
     TEST_ASSERT(smiles=="C1CC/C=C/C=C/CCC1");
 
@@ -2364,7 +2386,6 @@ void testBug3139534(){
     TEST_ASSERT(smiles=="C1=C/NCCCCC/1");
 
     smiles = MolToSmiles(*m,true,false,0,false);
-    std::cerr<<smiles<<std::endl;
     TEST_ASSERT(smiles=="C1CCCCN/C=C/1");
 
     delete m;
@@ -2380,7 +2401,6 @@ void testBug3139534(){
     TEST_ASSERT(m->getBondWithIdx(14)->getStereo()==Bond::STEREOE);
 
     smiles = MolToSmiles(*m,true);
-    std::cerr<<smiles<<std::endl;
     TEST_ASSERT(smiles=="CCC/[N+]1=C/c2ccccc2OC(=O)\\C=C/1O");
 
     delete m;
@@ -3078,7 +3098,6 @@ void testFragmentSmiles(){
     std::string labels[6]={"a","b","","a","",""};
     std::vector<std::string> bondLabels(labels,labels+6);
     std::string csmiles = MolFragmentToSmiles(*m,atomsToUse,0,0,&bondLabels);
-    std::cerr<<csmiles<<std::endl;
     TEST_ASSERT(csmiles=="CaC(aC)bC");
     delete m;
   }
@@ -3154,6 +3173,7 @@ void testBug253(){
     m = SmilesToMol(smiles);
     TEST_ASSERT(m);
     std::string csmiles1 = MolToSmiles(*m,true);
+    std::cerr<<"--"<<csmiles1<<std::endl;
     TEST_ASSERT(csmiles1=="C(CC1CCCCC12CCCCC2)C1CCCC1");
   }
 
@@ -3315,6 +3335,133 @@ void testGithub45(){
   BOOST_LOG(rdInfoLog) << "done" << std::endl;
 }
 
+void testGithub206(){
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "Testing Github 206: Problems round-tripping P" << std::endl;
+  {
+    RWMol *m;
+    std::string smiles="O=[PH3]";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+    std::string csmiles = MolToSmiles(*m,true);
+    TEST_ASSERT(csmiles=="O=[PH3]");
+    delete m;
+  }
+  {
+    RWMol *m;
+    std::string smiles="O=P";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+    std::string csmiles = MolToSmiles(*m,true);
+    TEST_ASSERT(csmiles=="O=P");
+    delete m;
+  }
+  {
+    RWMol *m;
+    std::string smiles="O=[PH]";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+    std::string csmiles = MolToSmiles(*m,true);
+    TEST_ASSERT(csmiles=="O=P");
+    delete m;
+  }
+  BOOST_LOG(rdInfoLog) << "done" << std::endl;
+}
+void testGithub210(){
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "Testing Github 210: flag possible stereocenters when calling assignStereochemistry()" << std::endl;
+  {
+    RWMol *m;
+    std::string smiles="O[C@H](F)CC(F)(Cl)I";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getAtomWithIdx(1)->hasProp("_CIPCode"));
+    TEST_ASSERT(m->getAtomWithIdx(4)->hasProp("_ChiralityPossible"));
+    delete m;
+  }
+  BOOST_LOG(rdInfoLog) << "done" << std::endl;
+}
+void testGithub298(){
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "Testing Github 298: cannot generate smiles for ChEBI_50252" << std::endl;
+  {
+    std::string rdbase = getenv("RDBASE");
+    std::string fName = rdbase + "/Code/GraphMol/test_data/ChEBI_50252.mol";
+    RWMol *m = MolFileToMol(fName,false,false);
+
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getNumAtoms()==80);
+    TEST_ASSERT(m->getNumBonds()==210);
+    m->updatePropertyCache(false);
+    MolOps::fastFindRings(*m);
+
+    std::string csmiles=MolToSmiles(*m);
+    TEST_ASSERT(csmiles!="");
+    TEST_ASSERT(csmiles.find("%100")==std::string::npos);
+    
+    delete m;
+    m = SmilesToMol(csmiles,0,false);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getNumAtoms()==80);
+    TEST_ASSERT(m->getNumBonds()==210);
+    delete m;
+  }
+  BOOST_LOG(rdInfoLog) << "done" << std::endl;
+}
+
+void testGithub378(){
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "Testing Github 378: SMILES parser doing the wrong thing for odd dot-disconnected construct" << std::endl;
+  {
+    RWMol *m;
+    std::string smiles="C1.C1CO1.N1";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getBondBetweenAtoms(0,1));
+    TEST_ASSERT(m->getBondBetweenAtoms(0,1)->getBondType()==Bond::SINGLE);
+    TEST_ASSERT(m->getBondBetweenAtoms(3,4));
+    TEST_ASSERT(m->getBondBetweenAtoms(3,4)->getBondType()==Bond::SINGLE);
+    TEST_ASSERT(!m->getBondBetweenAtoms(1,3));
+    delete m;
+  }
+  {
+    RWMol *m;
+    std::string smiles="C1(O.C1)CO1.N1";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+    TEST_ASSERT(m->getBondBetweenAtoms(0,2));
+    TEST_ASSERT(m->getBondBetweenAtoms(0,2)->getBondType()==Bond::SINGLE);
+    TEST_ASSERT(m->getBondBetweenAtoms(0,3));
+    TEST_ASSERT(m->getBondBetweenAtoms(0,3)->getBondType()==Bond::SINGLE);
+    TEST_ASSERT(m->getBondBetweenAtoms(5,4));
+    TEST_ASSERT(m->getBondBetweenAtoms(5,4)->getBondType()==Bond::SINGLE);
+    TEST_ASSERT(!m->getBondBetweenAtoms(2,3));
+    delete m;
+  }
+
+  BOOST_LOG(rdInfoLog) << "done" << std::endl;
+}
+
+void testGithub389(){
+  BOOST_LOG(rdInfoLog) << "-------------------------------------" << std::endl;
+  BOOST_LOG(rdInfoLog) << "Testing Github 389: Add option to SmilesWriter to allow writing of all explicit hydrogens" << std::endl;
+  {
+    RWMol *m;
+    std::string smiles="CCO";
+    m = SmilesToMol(smiles);
+    TEST_ASSERT(m);
+
+    std::string csmiles=MolToSmiles(*m,true,false,-1,true,false,true);
+    TEST_ASSERT(csmiles!="");
+    TEST_ASSERT(csmiles.find("[CH3]")!=std::string::npos);
+    TEST_ASSERT(csmiles.find("[CH2]")!=std::string::npos);
+    TEST_ASSERT(csmiles.find("[OH]")!=std::string::npos);
+
+    delete m;
+  }
+  BOOST_LOG(rdInfoLog) << "done" << std::endl;
+}
+
 
 int
 main(int argc, char *argv[])
@@ -3366,8 +3513,13 @@ main(int argc, char *argv[])
   testBug257();
   testFragmentSmiles();
   testRingStereochem();
-#endif
   testGithub12();
   testGithub45();
+  testGithub206();
+  testGithub210();
+#endif
+  testGithub298();
+  testGithub378();
+  testGithub389();
   //testBug1719046();
 }

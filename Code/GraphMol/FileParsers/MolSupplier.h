@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2002-2008 greg landrum and Rational Discovery LLC
+//  Copyright (C) 2002-2013 greg landrum, Rational Discovery LLC
 //
 //   @@ All Rights Reserved @@
 //  This file is part of the RDKit.
@@ -240,7 +240,7 @@ namespace RDKit {
     ROMol *processLine(std::string inLine);
     void processTitleLine();
     std::string nextLine();
-    int skipComments();
+    long int skipComments();
     void checkForEnd();
     
     bool df_end; // have we reached the end of the file?
@@ -318,7 +318,6 @@ namespace RDKit {
 
     bool df_end; // have we reached the end of the file?
     int d_len; // total number of mols in the file
-    int d_next; // the  molecule we are ready to read
     int d_last; // the molecule we are ready to read
     int d_line; // line number we are currently on
     int d_confId2D; // id to use for 2D conformers
@@ -328,6 +327,30 @@ namespace RDKit {
     std::string d_nameProp; // local storage for the property providing mol names
   };
 
+  //! lazy file parser for PDB files
+  class PDBMolSupplier : public MolSupplier {
+  public:
+    explicit PDBMolSupplier(std::istream *inStream, bool takeOwnership=true,
+                            bool sanitize=true, bool removeHs=true,
+                            unsigned int flavor=0);
+    explicit PDBMolSupplier(const std::string &fname,
+                            bool sanitize=true, bool removeHs=true,
+                            unsigned int flavor=0);
+
+    virtual ~PDBMolSupplier() {
+      if (df_owner && dp_inStream)
+        delete dp_inStream;
+    };
+
+    virtual void init();
+    virtual void reset();
+    virtual ROMol *next();
+    virtual bool atEnd();
+
+  protected:
+    bool df_sanitize,df_removeHs;
+    unsigned int d_flavor;
+  };
 }
 
 #endif

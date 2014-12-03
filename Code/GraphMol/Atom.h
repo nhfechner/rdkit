@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2001-2010 Greg Landrum and Rational Discovery LLC
+//  Copyright (C) 2001-2014 Greg Landrum and Rational Discovery LLC
 //
 //   @@ All Rights Reserved @@
 //  This file is part of the RDKit.
@@ -23,6 +23,7 @@
 #include <Query/QueryObjects.h>
 #include <RDGeneral/types.h>
 #include <RDGeneral/Dict.h>
+#include <GraphMol/details.h>
 
 namespace RDKit{
   class ROMol;
@@ -89,8 +90,8 @@ namespace RDKit{
     //! store type of chirality
     typedef enum {
       CHI_UNSPECIFIED=0,  //!< chirality that hasn't been specified
-      CHI_TETRAHEDRAL_CW, //!< tetrahedral: clockwise rotation (SMILES @@)
-      CHI_TETRAHEDRAL_CCW,//!< tetrahedral: counter-clockwise rotation (SMILES @)
+      CHI_TETRAHEDRAL_CW, //!< tetrahedral: clockwise rotation (SMILES \@\@)
+      CHI_TETRAHEDRAL_CCW,//!< tetrahedral: counter-clockwise rotation (SMILES \@)
       CHI_OTHER           //!< some unrecognized type of chirality
     } ChiralType;
 
@@ -241,12 +242,12 @@ namespace RDKit{
     //! inverts our \c chiralTag
     void invertChirality();
     //! returns our \c chiralTag
-    ChiralType getChiralTag() const { return d_chiralTag; };
+    ChiralType getChiralTag() const { return static_cast<ChiralType>(d_chiralTag); };
 
     //! sets our hybridization
     void setHybridization(HybridizationType what) { d_hybrid = what; };
     //! returns our hybridization
-    HybridizationType getHybridization() const { return d_hybrid; };
+    HybridizationType getHybridization() const { return static_cast<HybridizationType>(d_hybrid); };
 
     // ------------------------------------
     // Some words of explanation before getting down into
@@ -276,29 +277,37 @@ namespace RDKit{
     //! returns whether or not we match the argument
     /*!
         <b>Notes:</b>
+          The general rule is that if a property on this atom has a non-default value,
+          the property on the other atom must have the same value.
+          The exception to this is H counts, which are ignored. These turns out to be
+            impossible to handle generally, so rather than having odd and hard-to-explain
+            exceptions, we ignore them entirely.
+
           Here are the rules for atom-atom matching:
-          | This    | Other   | Match |
+          | This    | Other   | Match | Reason
           | CCO     | CCO     | Yes   |
           | CCO     | CC[O-]  | Yes   |
-          | CC[O-]  | CCO     | No    |
+          | CC[O-]  | CCO     | No    | Charge
           | CC[O-]  | CC[O-]  | Yes   |
-          | CC[OH]  | CC[O-]  | No    |
-          | CC[OH]  | CCOC    | No    |
+          | CC[OH]  | CC[O-]  | Yes   | 
+          | CC[OH]  | CCOC    | Yes   |
           | CCO     | CCOC    | Yes   |
           | CCC     | CCC     | Yes   |
           | CCC     | CC[14C] | Yes   |
-          | CC[14C] | CCC     | No    |
+          | CC[14C] | CCC     | No    | Isotope
           | CC[14C] | CC[14C] | Yes   |
           | C       | OCO     | Yes   |
           | [CH]    | OCO     | Yes   |
           | [CH2]   | OCO     | Yes   |
-          | [CH3]   | OCO     | No    |
+          | [CH3]   | OCO     | No    | Radical
           | C       | O[CH2]O | Yes   |
           | [CH2]   | O[CH2]O | Yes   |
     */
     virtual bool Match(Atom const *what) const;
     //! \overload
-    virtual bool Match(const ATOM_SPTR what) const;
+    virtual inline bool Match(const ATOM_SPTR &what) const {
+      return Match(what.get());
+    };
   
 
     // ------------------------------------
@@ -488,20 +497,22 @@ namespace RDKit{
 
     bool df_isAromatic; 
     bool df_noImplicit;
-    int d_dativeFlag;
-    unsigned int d_numExplicitHs;
-    int d_formalCharge;
-    unsigned int d_atomicNum;
-    unsigned int d_index;
-    // NOTE that these cannot be signed ints, they are calculated using
+    boost::int8_t d_dativeFlag;
+    boost::uint8_t d_numExplicitHs;
+    boost::int8_t d_formalCharge;
+    boost::uint8_t d_atomicNum;
+    // NOTE that these cannot be signed, they are calculated using
     // a lazy scheme and are initialized to -1 to indicate that the
     // calculation has not yet been done.
-    int d_implicitValence, d_explicitValence;
-    unsigned int d_numRadicalElectrons;
-    ChiralType d_chiralTag;
-    HybridizationType d_hybrid;
-    double d_mass;
-    unsigned int d_isotope;
+    boost::int8_t d_implicitValence, d_explicitValence;
+    boost::uint8_t d_numRadicalElectrons;
+    boost::uint8_t d_chiralTag;
+    boost::uint8_t d_hybrid;
+
+    atomindex_t d_index;
+    boost::uint16_t d_isotope;
+
+    float d_mass;
     ROMol *dp_mol;
     Dict *dp_props;
     AtomMonomerInfo *dp_monomerInfo;

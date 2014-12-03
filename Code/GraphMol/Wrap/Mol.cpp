@@ -15,7 +15,9 @@
 #include "rdchem.h"
 #include "seqs.hpp"
 // ours
+#include <RDBoost/pyint_api.h>
 #include <GraphMol/RDKitBase.h>
+#include <GraphMol/QueryOps.h>
 #include <GraphMol/MolPickler.h>
 #include <GraphMol/Substruct/SubstructMatch.h>
 #include <boost/python/iterator.hpp>
@@ -26,10 +28,11 @@ namespace python = boost::python;
 
 namespace RDKit {
 
-  std::string MolToBinary(const ROMol &self){
+  python::object MolToBinary(const ROMol &self){
     std::string res;
     MolPickler::pickleMol(self,res);
-    return res;
+    python::object retval = python::object(python::handle<>(PyBytes_FromStringAndSize(res.c_str(),res.length())));
+    return retval;
   }
   //
   // allows molecules to be pickled.
@@ -46,7 +49,8 @@ namespace RDKit {
   };
 
   bool HasSubstructMatchStr(std::string pkl, const ROMol &query,
-			    bool recursionPossible=true,bool useChirality=false){
+			    bool recursionPossible=true,bool useChirality=false,
+                            bool useQueryQueryMatches=false){
     ROMol *mol;
     try {
       mol = new ROMol(pkl);
@@ -57,15 +61,16 @@ namespace RDKit {
       throw ValueErrorException("Null Molecule");
     }
     MatchVectType res;
-    bool hasM=SubstructMatch(*mol,query,res,recursionPossible,useChirality);
+    bool hasM=SubstructMatch(*mol,query,res,recursionPossible,useChirality,useQueryQueryMatches);
     delete mol;
     return hasM;
   }
 
   bool HasSubstructMatch(const ROMol &mol, const ROMol &query,
-			 bool recursionPossible=true,bool useChirality=false){
+			 bool recursionPossible=true,bool useChirality=false,
+                            bool useQueryQueryMatches=false){
     MatchVectType res;
-    return SubstructMatch(mol,query,res,recursionPossible,useChirality);
+    return SubstructMatch(mol,query,res,recursionPossible,useChirality,useQueryQueryMatches);
   }
 
   PyObject *convertMatches(MatchVectType &matches){
@@ -76,15 +81,18 @@ namespace RDKit {
     }
     return res;
   }
-  PyObject *GetSubstructMatch(const ROMol &mol, const ROMol &query,bool useChirality=false){
+  PyObject *GetSubstructMatch(const ROMol &mol, const ROMol &query,bool useChirality=false,
+                            bool useQueryQueryMatches=false){
     MatchVectType matches;
-    SubstructMatch(mol,query,matches,true,useChirality);
+    SubstructMatch(mol,query,matches,true,useChirality,useQueryQueryMatches);
     return convertMatches(matches);
   }
 
-  PyObject *GetSubstructMatches(const ROMol &mol, const ROMol &query,bool uniquify=true,bool useChirality=false){
+  PyObject *GetSubstructMatches(const ROMol &mol, const ROMol &query,bool uniquify=true,
+                                bool useChirality=false,
+                                bool useQueryQueryMatches=false){
     std::vector< MatchVectType >  matches;
-    int matched = SubstructMatch(mol,query,matches,uniquify,true,useChirality);
+    int matched = SubstructMatch(mol,query,matches,uniquify,true,useChirality,useQueryQueryMatches);
     PyObject *res = PyTuple_New(matched);
     for(int idx=0;idx<matched;idx++){
       PyTuple_SetItem(res,idx,convertMatches(matches[idx]));
@@ -147,38 +155,33 @@ namespace RDKit {
     mol.debugMol(std::cout);
   }
 
-#if 0
-  // FIX: we should eventually figure out how to do iterators properly
-  //  so that these tuples don't have to be built
-  PyObject *MolGetAtoms(ROMol *mol){
-    python::list res;
-    for(ROMol::AtomIterator i=mol->beginAtoms();i!=mol->endAtoms();i++){
-      res.append(*i);
-    }
-    //return python::incref(python::tuple(res).ptr());
-    return python::incref(res.ptr());
-  }
-#else
   // FIX: we should eventually figure out how to do iterators properly
   AtomIterSeq *MolGetAtoms(ROMol *mol){
     AtomIterSeq *res = new AtomIterSeq(mol->beginAtoms(),mol->endAtoms());
     return res;
   }
-  AromaticAtomIterSeq *MolGetAromaticAtoms(ROMol *mol){
-    AromaticAtomIterSeq *res = new AromaticAtomIterSeq(mol->beginAromaticAtoms(),
-						       mol->endAromaticAtoms());
+  QueryAtomIterSeq *MolGetAromaticAtoms(ROMol *mol){
+    QueryAtom *qa=new QueryAtom();
+    qa->setQuery(makeAtomAromaticQuery());
+    QueryAtomIterSeq *res = new QueryAtomIterSeq(mol->beginQueryAtoms(qa),
+                                                 mol->endQueryAtoms());
     return res;
   }
-  HeteroatomIterSeq *MolGetHeteros(ROMol *mol){
-    HeteroatomIterSeq *res = new HeteroatomIterSeq(mol->beginHeteros(),
-						   mol->endHeteros());
+  QueryAtomIterSeq *MolGetQueryAtoms(ROMol *mol,QueryAtom *qa){
+    QueryAtomIterSeq *res = new QueryAtomIterSeq(mol->beginQueryAtoms(qa),
+                                                 mol->endQueryAtoms());
     return res;
   }
+
+  //AtomIterSeq *MolGetHeteros(ROMol *mol){
+  //  AtomIterSeq *res = new AtomIterSeq(mol->beginHeteros(),
+  //                                     mol->endHeteros());
+  //  return res;
+  //}
   BondIterSeq *MolGetBonds(ROMol *mol){
     BondIterSeq *res = new BondIterSeq(mol->beginBonds(),mol->endBonds());
     return res;
   }
-#endif
 
   int getMolNumAtoms(const ROMol &mol, int onlyHeavy, bool onlyExplicit){
     if(onlyHeavy>-1){
@@ -210,6 +213,7 @@ struct mol_wrapper {
 			  molClassDoc.c_str(),
 			  python::init<>("Constructor, takes no arguments"))
       .def(python::init<const std::string &>())
+      .def(python::init<const ROMol &>())
       .def("GetNumAtoms",getMolNumAtoms,
 	   (python::arg("onlyHeavy")=-1,
             python::arg("onlyExplicit")=true),
@@ -285,20 +289,24 @@ struct mol_wrapper {
       .def("HasSubstructMatch",HasSubstructMatch,
 	   (python::arg("self"),python::arg("query"),
 	    python::arg("recursionPossible")=true,
-	    python::arg("useChirality")=false),
+	    python::arg("useChirality")=false,
+            python::arg("useQueryQueryMatches")=false),
 	   "Queries whether or not the molecule contains a particular substructure.\n\n"
 	   "  ARGUMENTS:\n"
 	   "    - query: a Molecule\n\n"
 	   "    - recursionPossible: (optional)\n\n"
 	   "    - useChirality: enables the use of stereochemistry in the matching\n\n"
-	   "  RETURNS: 1 or 0\n")
+	   "    - useQueryQueryMatches: use query-query matching logic\n\n"
+	   "  RETURNS: True or False\n")
       .def("GetSubstructMatch",GetSubstructMatch,
 	   (python::arg("self"),python::arg("query"),
-	    python::arg("useChirality")=false),
+	    python::arg("useChirality")=false,
+            python::arg("useQueryQueryMatches")=false),
 	   "Returns the indices of the molecule's atoms that match a substructure query.\n\n"
 	   "  ARGUMENTS:\n"
 	   "    - query: a Molecule\n\n"
 	   "    - useChirality: enables the use of stereochemistry in the matching\n\n"
+	   "    - useQueryQueryMatches: use query-query matching logic\n\n"
 	   "  RETURNS: a tuple of integers\n\n"
 	   "  NOTES:\n"
 	   "     - only a single match is returned\n"
@@ -311,19 +319,20 @@ struct mol_wrapper {
 	   GetSubstructMatches,
 	   (python::arg("self"),python::arg("query"),
 	    python::arg("uniquify")=true,
-	    python::arg("useChirality")=false),
+	    python::arg("useChirality")=false,
+            python::arg("useQueryQueryMatches")=false),
 	   "Returns tuples of the indices of the molecule's atoms that match a substructure query.\n\n"
 	   "  ARGUMENTS:\n"
 	   "    - query: a Molecule.\n"
 	   "    - uniquify: (optional) determines whether or not the matches are uniquified.\n"
 	   "                Defaults to 1.\n\n"
 	   "    - useChirality: enables the use of stereochemistry in the matching\n\n"
+	   "    - useQueryQueryMatches: use query-query matching logic\n\n"
 	   "  RETURNS: a tuple of tuples of integers\n\n"
 	   "  NOTE:\n"
 	   "     - the ordering of the indices corresponds to the atom ordering\n"
 	   "         in the query. For example, the first index is for the atom in\n"
 	   "         this molecule that matches the first atom in the query.\n")
-
 
       // properties
       .def("SetProp",MolSetProp,
@@ -376,6 +385,15 @@ struct mol_wrapper {
            python::return_value_policy<python::manage_new_object,
            python::with_custodian_and_ward_postcall<0,1> >(),
 	   "Returns a read-only sequence containing all of the molecule's Atoms.\n")
+      .def("GetAromaticAtoms",MolGetAromaticAtoms,
+           python::return_value_policy<python::manage_new_object,
+           python::with_custodian_and_ward_postcall<0,1> >(),
+	   "Returns a read-only sequence containing all of the molecule's aromatic Atoms.\n")
+      .def("GetAtomsMatchingQuery",MolGetQueryAtoms,
+           python::return_value_policy<python::manage_new_object,
+           python::with_custodian_and_ward_postcall<0,1> >(),
+	   "Returns a read-only sequence containing all of the atoms in a molecule that match the query atom.\n")
+
       .def("GetBonds",MolGetBonds,
            python::return_value_policy<python::manage_new_object,
            python::with_custodian_and_ward_postcall<0,1> >(),
@@ -400,7 +418,9 @@ struct mol_wrapper {
                 HasSubstructMatchStr,
                 (python::arg("pkl"),python::arg("query"),
 		 python::arg("recursionPossible")=true,
-		 python::arg("useChirality")=false),
+		 python::arg("useChirality")=false,
+		 python::arg("useQueryQueryMatches")=false
+                 ),
 		"This function is included to speed substructure queries from databases, \n"
 		"it's probably not of\n"
 		"general interest.\n\n"
@@ -409,7 +429,8 @@ struct mol_wrapper {
 		"    - query: a Molecule\n\n"
 		"    - recursionPossible: (optional)\n\n"
 		"    - useChirality: (optional)\n\n"
-		"  RETURNS: 1 or 0\n");
+                "    - useQueryQueryMatches: use query-query matching logic\n\n"
+		"  RETURNS: True or False\n");
 
     
   };

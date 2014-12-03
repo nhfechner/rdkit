@@ -49,6 +49,7 @@
 #include <boost/dynamic_bitset.hpp>
 #include <RDGeneral/FileParseException.h>
 #include <RDGeneral/BadFileException.h>
+#include <RDGeneral/LocaleSwitcher.h>
 
 
 namespace RDKit{
@@ -524,17 +525,17 @@ namespace RDKit{
       } else if (symb=="HET"){
         //Tripos: N,O,P,S
         QueryAtom *query=new QueryAtom(7);
-        query->expandQuery(makeAtomNumEqualsQuery(8),Queries::COMPOSITE_OR,true);
-        query->expandQuery(makeAtomNumEqualsQuery(15),Queries::COMPOSITE_OR,true);
-        query->expandQuery(makeAtomNumEqualsQuery(16),Queries::COMPOSITE_OR,true);
+        query->expandQuery(makeAtomNumQuery(8),Queries::COMPOSITE_OR,true);
+        query->expandQuery(makeAtomNumQuery(15),Queries::COMPOSITE_OR,true);
+        query->expandQuery(makeAtomNumQuery(16),Queries::COMPOSITE_OR,true);
         delete res;
         res=query;
       }else if (symb=="HAL"){
         //Tripos: F,Cl,Br,I
         QueryAtom *query=new QueryAtom(9);
-        query->expandQuery(makeAtomNumEqualsQuery(17),Queries::COMPOSITE_OR,true);
-        query->expandQuery(makeAtomNumEqualsQuery(35),Queries::COMPOSITE_OR,true);
-        query->expandQuery(makeAtomNumEqualsQuery(53),Queries::COMPOSITE_OR,true);
+        query->expandQuery(makeAtomNumQuery(17),Queries::COMPOSITE_OR,true);
+        query->expandQuery(makeAtomNumQuery(35),Queries::COMPOSITE_OR,true);
+        query->expandQuery(makeAtomNumQuery(53),Queries::COMPOSITE_OR,true);
         delete res;
         res=query;
       } else{
@@ -724,6 +725,7 @@ namespace RDKit{
     std::string tempStr,lineBeg;
     typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
     boost::char_separator<char> sep(" \t\n");
+    Utils::LocaleSwitcher ls;
 
     // all molecules start with a @<TRIPOS>MOLECULE! There is no other way to define an end of
     // molecule than to find a new one or an eof. Hence I have to read until I find one of the two ...
@@ -873,9 +875,7 @@ namespace RDKit{
             
       try {
         if(removeHs){
-          ROMol *tmp=MolOps::removeHs(*res,false,false);
-          delete res;
-          res = static_cast<RWMol *>(tmp);
+          MolOps::removeHs(*res,false,false);
         } else {
           MolOps::sanitizeMol(*res);
         }

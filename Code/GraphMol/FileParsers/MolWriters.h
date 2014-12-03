@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2002-2010 Rational Discovery LLC
+//  Copyright (C) 2002-2013 Greg Landrum, Rational Discovery LLC
 //
 //   @@ All Rights Reserved @@
 //  This file is part of the RDKit.
@@ -23,7 +23,7 @@ namespace RDKit {
   class MolWriter {
   public:
     virtual ~MolWriter() {}
-    virtual void write(ROMol &mol,int confId=defaultConfId) = 0;
+    virtual void write(const ROMol &mol,int confId=defaultConfId) = 0;
     virtual void flush() = 0;
     virtual void close() = 0;
     virtual void setProps(const STR_VECT &propNames)=0;
@@ -73,7 +73,7 @@ namespace RDKit {
     void setProps(const STR_VECT &propNames);
 
     //! \brief write a new molecule to the file
-    void write(ROMol &mol,int confId=defaultConfId);
+    void write(const ROMol &mol,int confId=defaultConfId);
 
     //! \brief flush the ostream
     void flush() {
@@ -142,7 +142,7 @@ namespace RDKit {
     void setProps(const STR_VECT &propNames);
 
     //! \brief write a new molecule to the file
-    void write(ROMol &mol, int confId=defaultConfId);
+    void write(const ROMol &mol, int confId=defaultConfId);
 
     //! \brief flush the ostream
     void flush() { 
@@ -164,6 +164,12 @@ namespace RDKit {
     //! \brief get the number of molecules written so far
     unsigned int numMols() const { return d_molid; };
 
+    void setForceV3000(bool val) { df_forceV3000=val; };
+    bool getForceV3000() const { return df_forceV3000; };    
+    
+    void setKekulize(bool val) { df_kekulize=val; };
+    bool getKekulize() const { return df_kekulize; };    
+    
   private:
     void writeProperty(const ROMol &mol, std::string name);
 
@@ -171,6 +177,8 @@ namespace RDKit {
     bool df_owner;
     unsigned int d_molid; // the number of the molecules we wrote so far
     STR_VECT d_props; // list of property name that need to be written out
+    bool df_forceV3000; // force writing the mol blocks as V3000
+    bool df_kekulize; // toggle kekulization of molecules on writing
   };
 
   //! The TDTWriter is for writing molecules and properties to
@@ -196,7 +204,7 @@ namespace RDKit {
     void setProps(const STR_VECT &propNames);
 
     //! \brief write a new molecule to the file
-    void write(ROMol &mol, int confId=defaultConfId);
+    void write(const ROMol &mol, int confId=defaultConfId);
 
     //! \brief flush the ostream
     void flush() { 
@@ -238,6 +246,48 @@ namespace RDKit {
     bool df_writeNames; // write a name record for each molecule
     unsigned int d_numDigits; // number of digits to use in our output of coordinates;
   };
+
+  //! The PDBWriter is for writing molecules to Brookhaven Protein
+  //! DataBank format files.
+  class PDBWriter : public MolWriter {
+  public:
+    PDBWriter(std::string fileName, unsigned int flavor = 0);
+    PDBWriter(std::ostream *outStream, bool takeOwnership=false,
+              unsigned int flavor = 0);
+    ~PDBWriter();
+
+    //! \brief write a new molecule to the file
+    void write(const ROMol &mol, int confId=defaultConfId);
+
+    void setProps(const STR_VECT&) {};
+
+    //! \brief flush the ostream
+    void flush() { 
+      PRECONDITION(dp_ostream,"no output stream");
+      dp_ostream->flush();
+    } ;
+
+    //! \brief close our stream (the writer cannot be used again)
+    void close() {
+      PRECONDITION(dp_ostream,"no output stream");
+      dp_ostream->flush();
+      if(df_owner) {
+        delete dp_ostream;
+        df_owner=false;
+      }
+      dp_ostream=NULL;
+    };
+
+    //! \brief get the number of molecules written so far
+    unsigned int numMols() const { return d_count;} ;
+
+  private:
+    std::ostream *dp_ostream;
+    unsigned int d_flavor;
+    unsigned int d_count;
+    bool df_owner;
+  };
+ 
 
 }
 

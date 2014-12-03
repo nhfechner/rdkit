@@ -60,12 +60,19 @@ namespace Queries {
     bool getNegation() const { return this->df_negate; };
 
     //! sets our text description
-    void setDescription(std::string &descr) { this->d_description = descr; };
+    void setDescription(const std::string &descr) { this->d_description = descr; };
     //! \overload
     void setDescription(const char *descr) { this->d_description = std::string(descr); };
     //! returns our text description
-    std::string getDescription() const { return this->d_description; };
-
+    const std::string &getDescription() const { return this->d_description; };
+    //! returns a fuller text description
+    virtual std::string getFullDescription() const {
+      if(!getNegation())
+        return getDescription();
+      else
+        return "not "+getDescription();
+    }
+    
     //! sets our match function
     void setMatchFunc(bool (*what)(MatchFuncArgType)) { this->d_matchFunc = what; };
     //! returns our match function:
@@ -124,7 +131,7 @@ namespace Queries {
 
     //! \brief calls our \c dataFunc (if it's set) on \c what and returns
     //! the result, otherwise returns \c what
-    MatchFuncArgType TypeConvert(MatchFuncArgType what,Int2Type<false> d) const{
+    MatchFuncArgType TypeConvert(MatchFuncArgType what,Int2Type<false> /*d*/) const{
       MatchFuncArgType mfArg;
       if( this->d_dataFunc != NULL ){
 	mfArg = this->d_dataFunc(what);
@@ -134,7 +141,7 @@ namespace Queries {
       return mfArg;
     }
     //! calls our \c dataFunc (which must be set) on \c what and returns the result
-    MatchFuncArgType TypeConvert(DataFuncArgType what,Int2Type<true> d) const{
+    MatchFuncArgType TypeConvert(DataFuncArgType what,Int2Type<true> /*d*/) const{
       PRECONDITION(this->d_dataFunc,"no data function");
       MatchFuncArgType mfArg;
       mfArg = this->d_dataFunc(what);
